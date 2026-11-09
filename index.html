@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0a0c0b">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Remote PC</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="login" class="login" hidden>
+  <form id="loginForm" autocomplete="off">
+    <div class="brand big">REMOTE<b>/</b>PC</div>
+    <p id="loginMsg" class="mut">Paste your access token to pair this phone.</p>
+    <input id="tokenInput" type="password" placeholder="access token" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <button class="big-btn" type="submit">CONNECT</button>
+  </form>
+</div>
+
+<div id="app" hidden>
+  <header class="top">
+    <div class="brand">REMOTE<b>/</b>PC</div>
+    <div class="stats">
+      <span class="chip"><i id="pcDot" class="dot"></i><span id="pcLabel">PC OFFLINE</span></span>
+      <span class="chip" id="hlpLabel">0 HELPER</span>
+      <span class="chip" id="lat">RELAY --</span>
+    </div>
+    <button id="btnPower" class="icon-btn" aria-label="Power menu">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v9"/><path d="M6.3 6.8a8 8 0 1 0 11.4 0"/></svg>
+    </button>
+    <button id="btnSet" class="icon-btn" aria-label="Settings">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>
+    </button>
+  </header>
+
+  <main>
+    <!-- 1. PC screen -->
+    <section class="area-scr">
+      <div id="scrBox" class="scr-box">
+        <canvas id="scr"></canvas>
+        <i class="c tl"></i><i class="c tr"></i><i class="c bl"></i><i class="c br"></i>
+        <div class="hud">
+          <span class="hchip" id="hZoom">ZOOM 2×</span>
+          <button class="hchip btn" id="hAuto" type="button">AUTO</button>
+          <button class="hchip btn" id="hEye" type="button">LIVE</button>
+          <span class="hchip" id="hFps">0 FPS</span>
+        </div>
+        <div id="scrEmpty" class="scr-empty">PC OFFLINE</div>
+      </div>
+    </section>
+
+    <!-- 2. keyboard -->
+    <section class="area-kb" id="kbWrap">
+      <div class="tabs">
+        <button class="tab on" data-layer="abc" type="button">ABC</button>
+        <button class="tab" data-layer="num" type="button">123</button>
+        <button class="tab" data-layer="sp" type="button">SPECIAL</button>
+        <i class="grow"></i>
+        <button class="tab key" id="bPrt" type="button">PrtSc</button>
+        <button class="tab key" id="bNative" type="button">⌨ PHONE</button>
+        <button class="tab key" id="bKbToggle" type="button">▾</button>
+      </div>
+      <div id="kb"></div>
+    </section>
+
+    <!-- 3. buttons + trackpad -->
+    <section class="area-ctl">
+      <div class="pills">
+        <button class="pill" id="bCopy" type="button">COPY</button>
+        <button class="pill" id="bPaste" type="button">PASTE</button>
+        <button class="pill" id="bZm" type="button">ZOOM −</button>
+        <button class="pill" id="bZp" type="button">ZOOM +</button>
+      </div>
+      <div id="pad">
+        <i class="c tl"></i><i class="c tr"></i><i class="c bl"></i><i class="c br"></i>
+        <button id="modeChip" class="mode-chip" type="button">REL</button>
+        <div class="pad-hint">
+          <b>TRACKPAD</b>
+          <span>tap = click · 2-finger tap = right click</span>
+          <span>2-finger drag = scroll · hold = drag</span>
+        </div>
+      </div>
+      <div class="lr">
+        <button class="act mouse" id="bL" type="button">LEFT</button>
+        <button class="act mouse" id="bR" type="button">RIGHT</button>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="sheetPower" class="sheet" hidden>
+  <div class="sheet-bg" data-close></div>
+  <div class="sheet-box">
+    <h3>POWER</h3>
+    <button class="s-btn accent" data-wake>POWER ON <small>wake via helper</small></button>
+    <button class="s-btn danger" data-power="shutdown">SHUT DOWN</button>
+    <button class="s-btn danger" data-power="restart">RESTART</button>
+    <button class="s-btn" data-power="sleep">SLEEP</button>
+    <button class="s-btn" data-power="lock">LOCK</button>
+    <button class="s-btn" data-power="abort">CANCEL SHUTDOWN <small>within 5 sec</small></button>
+    <button class="s-btn ghost" data-close>CLOSE</button>
+  </div>
+</div>
+
+<div id="sheetSet" class="sheet" hidden>
+  <div class="sheet-bg" data-close></div>
+  <div class="sheet-box">
+    <h3>SETTINGS</h3>
+    <label class="field">Pointer speed <output id="oSens"></output>
+      <input id="rSens" type="range" min="0.5" max="3" step="0.1"></label>
+    <label class="field">Scroll speed <output id="oScroll"></output>
+      <input id="rScroll" type="range" min="0.3" max="2.5" step="0.1"></label>
+    <label class="check"><input id="cNatural" type="checkbox"> Natural scrolling (content follows finger)</label>
+    <label class="check"><input id="cTap" type="checkbox"> Tap to click</label>
+    <div class="field">Trackpad mode
+      <div class="seg">
+        <button type="button" id="mRel">RELATIVE</button>
+        <button type="button" id="mAbs">ABSOLUTE</button>
+      </div>
+    </div>
+    <div class="field">Screen quality <small class="mut">(lower = less data, faster)</small>
+      <div class="seg">
+        <button type="button" data-q="0">SAVER</button>
+        <button type="button" data-q="1">BALANCED</button>
+        <button type="button" data-q="2">SHARP</button>
+      </div>
+    </div>
+    <label class="check"><input id="cAuto" type="checkbox"> Auto zoom-out while the cursor moves fast</label>
+    <div class="field">PC MAC address (for Power On)
+      <input id="macInput" type="text" placeholder="AA:BB:CC:DD:EE:FF" autocapitalize="characters" spellcheck="false">
+      <div id="adapters" class="adapters"></div>
+    </div>
+    <button class="s-btn" id="bSave">SAVE</button>
+    <button class="s-btn ghost" id="bSignout">SIGN OUT / CHANGE TOKEN</button>
+  </div>
+</div>
+
+<div id="toast" role="status"></div>
+<textarea id="ghost" aria-hidden="true" tabindex="-1" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
+
+<script src="app.js"></script>
+</body>
+</html>

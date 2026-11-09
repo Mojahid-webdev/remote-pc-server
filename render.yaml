@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: phone-pc-remote
+    runtime: node
+    region: singapore
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /health
+    envVars:
+      - key: TOKEN
+        generateValue: true
