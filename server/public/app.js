@@ -13,11 +13,12 @@ const cfg = Object.assign(
   LS.get('cfg', {})
 );
 const saveCfg = () => LS.set('cfg', cfg);
+if (!cfg.m3) { cfg.loupe = false; cfg.z = 1; cfg.m3 = true; saveCfg(); }
 if (!cfg.m2) { cfg.sens = Math.max(cfg.sens, 2.4); cfg.lr = Math.max(cfg.lr, 90); cfg.m2 = true; saveCfg(); }
 let token = LS.get('token', '');
 
 const ZL = [1, 1.5, 2, 3, 4, 6];
-const QUAL = [{ w: 800, q: 52, fps: 12 }, { w: 1280, q: 70, fps: 16 }, { w: 1600, q: 80, fps: 18 }];
+const QUAL = [{ w: 720, q: 45, fps: 8 }, { w: 1024, q: 58, fps: 12 }, { w: 1440, q: 70, fps: 15 }];
 
 function applyTheme() {
   const r = document.documentElement, a = /^#[0-9a-f]{6}$/i.test(cfg.accent) ? cfg.accent : '#c8ff3e';
@@ -159,7 +160,8 @@ function sendView() {
   const want = viewWanted();
   if (want) {
     const q = QUAL[cfg.qual] || QUAL[1];
-    tx({ t: 'view', on: true, z: 1, auto: false, w: q.w, q: q.q, fps: q.fps, lc: loupeCrop(), sid });
+    const mv = !!(document.fullscreenElement || document.webkitFullscreenElement);
+    tx({ t: 'view', on: true, z: cfg.z || 1, auto: false, w: mv ? Math.max(q.w, 1280) : q.w, q: mv ? Math.max(q.q, 62) : q.q, fps: mv ? 20 : q.fps, lc: loupeCrop(), sid });
   } else if (wasViewing) {
     tx({ t: 'view', on: false });
   }
@@ -301,14 +303,37 @@ window.addEventListener('resize', sizeCanvas);
 /* zoom circle (the screen itself stays fixed) */
 function renderView() {
   const h = $('#hZoom');
-  h.textContent = cfg.loupe ? 'ZOOM CIRCLE ' + cfg.lz + '×' : 'ZOOM CIRCLE OFF';
-  h.classList.toggle('on', cfg.loupe);
+  h.textContent = 'ZOOM ' + (cfg.z || 1) + '×';
+  h.classList.toggle('on', (cfg.z || 1) > 1);
 }
 function setLoupe(on) {
   cfg.loupe = on; saveCfg(); if (!on) loupeImg = null; dirty = true; renderView(); sendView();
   const c = $('#cLoupe'); if (c) c.checked = on;
 }
-$('#hZoom').addEventListener('click', () => setLoupe(!cfg.loupe));
+/* button zoom: 1x -> 2x -> 3x -> 1x (the picture zooms around the cursor; no circle following the mouse) */
+$('#hZoom').addEventListener('click', () => {
+  const Z = [1, 2, 3];
+  cfg.z = Z[(Z.indexOf(cfg.z || 1) + 1) % Z.length];
+  saveCfg(); renderView(); sendView(); buzz(10);
+});
+/* movie mode: full screen, landscape, smoother picture */
+$('#hFull').addEventListener('click', async () => {
+  const box = $('#scrBox');
+  try {
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      await (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    } else {
+      await (box.requestFullscreen || box.webkitRequestFullscreen).call(box, { navigationUI: 'hide' });
+      try { await screen.orientation.lock('landscape'); } catch {}
+    }
+  } catch { toast('Full screen ei browser-e hoy na'); }
+});
+['fullscreenchange', 'webkitfullscreenchange'].forEach((ev) => document.addEventListener(ev, () => {
+  const on = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  $('#hFull').textContent = on ? '✕ EXIT' : '⛶ FULL';
+  if (!on) { try { screen.orientation.unlock(); } catch {} }
+  sizeCanvas(); sendView();
+}));
 
 /* ================= trackpad ================= */
 const pad = $('#pad');
@@ -822,4 +847,12 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catc
 applyTheme(); renderView(); buildKb(); renderStatus(); sizeCanvas(); keepAwake();
 requestAnimationFrame(loop);
 connect();
+/* helper phone app: hand it the relay address + token through a deep link (nothing leaves this phone) */
+$('#bHelperLink') && $('#bHelperLink').addEventListener('click', () => {
+  if (!token) return toast('Age token diye sign in koro');
+  const server = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
+  location.href = 'jchelper://setup?server=' + encodeURIComponent(server) + '&token=' + encodeURIComponent(token) +
+    '&mac=' + encodeURIComponent(normMac(cfg.mac) || '');
+});
 })();
+
