@@ -102,7 +102,7 @@ function onMsg(m) {
       state.helpers = m.helpers || []; state.info = m.info;
       if (!state.agent) clearScreen();
       autoMac(); renderStatus(); renderAdapters(); sendView();
-      if (!was && state.agent && wakePending) { wakePending = 0; toast('PC is online ✓', 3500); buzz([30, 40, 30]); }
+      if (!was && state.agent && wakePending) { wakePending = 0; toast('PC is online ✓', 3500); buzz([30, 40, 30]); if (typeof jcAdd === 'function') jcAdd('jc', 'PC chalu hoyeche.'); }
       break;
     }
     case 'cur': cur = { x: m.x, y: m.y }; break;
@@ -111,6 +111,7 @@ function onMsg(m) {
     case 'clip': onClip(m.text); break;
     case 'wake_sent':
       toast(m.helpers ? `Wake sent via ${m.helpers} helper${m.helpers > 1 ? 's' : ''}…` : 'No helper online. Open Termux on the helper phone.', 3500);
+      if (!m.helpers && typeof jcAdd === 'function') jcAdd('jc', 'Helper phone online nei, tai PC chalu korte parlam na. Helper phone (Termux) lagbe.');
       break;
     case 'wake_ack':
       if (!m.ok) toast(`${m.name}: ${m.error || 'wake failed'}`, 3500);
@@ -580,8 +581,27 @@ function jcSend(q) {
   q = (q || '').trim().slice(0, 300);
   if (!q) return;
   jcAdd('me', q);
-  if (!state.agent) return jcAdd('jc', 'PC offline. Age PC on koro.');
+  if (jcIsPowerOn(q)) {
+    if (state.agent) return jcAdd('jc', 'PC to ekhon-i chalu ache.');
+    return jcWake();
+  }
+  if (!state.agent) return jcAdd('jc', 'PC offline. "pc on koro" bolo, ba Power On chapo.');
   tx({ t: 'jc', q, id: String(Date.now()) });
+}
+/* "pc on koro / pc open / পিসি চালু" etc. is handled here on the phone: when the PC is off there is no agent to listen */
+function jcIsPowerOn(q) {
+  const t = q.toLowerCase().replace(/[!?,.;]/g, ' ');
+  const pc = /(\bpc\b|computer|laptop|\u09aa\u09bf\u09b8\u09bf|\u0995\u09ae\u09cd\u09aa\u09bf\u0989\u099f\u09be\u09b0)/;
+  const on = /(\bon\b|\bopen\b|khulo|kholo|\bkhol\b|chalu|chalao|start|power on|boot|wake|\u0985\u09a8|\u0993\u09aa\u09c7\u09a8|\u099a\u09be\u09b2\u09c1|\u099a\u09be\u09b2\u09be\u0993)/;
+  const off = /(shutdown|shut down|off|bondho|bandho|restart|sleep|lock|close|\u09ac\u09a8\u09cd\u09a7|\u0985\u09ab)/;
+  return pc.test(t) && on.test(t) && !off.test(t);
+}
+function jcWake() {
+  if (!normMac(cfg.mac)) return jcAdd('jc', 'PC-r MAC address save nei. PC ekbar chalu kore app-e dhukle nijei save hoy.');
+  tx({ t: 'wake', mac: normMac(cfg.mac), id: String(Date.now()) });
+  wakePending = Date.now();
+  jcAdd('jc', 'PC chalu korar signal pathalam. 1-2 minute-er moddhe on hole janabo.');
+  setTimeout(() => { if (wakePending && Date.now() - wakePending > 85000) { wakePending = 0; jcAdd('jc', 'PC ekhono offline. BIOS Wake-on-LAN, LAN cable ar helper phone check koro.'); } }, 90000);
 }
 function jcReply(m) {
   const say = m.say || (m.ok ? 'Hoye geche.' : 'Hoyni.');
@@ -593,7 +613,10 @@ function jcReply(m) {
       let sp = say.includes('\n') ? say.split('\n')[0] : say;
       if (sp.length > 400) sp = sp.slice(0, 400);
       const u = new SpeechSynthesisUtterance(sp);
-      u.lang = /[\u0980-\u09FF]/.test(sp) ? 'bn-BD' : (cfg.jcLang === 'en-US' ? 'en-US' : 'en-IN');
+      const isBn = /[\u0980-\u09FF]/.test(sp);
+      u.lang = isBn ? 'bn-BD' : (cfg.jcLang === 'en-US' ? 'en-US' : 'en-IN');
+      const v = jcPickVoice(isBn);
+      if (v) { u.voice = v; u.lang = v.lang; }
       if (talk) { u.onend = jcTalkNext; u.onerror = jcTalkNext; }
       speechSynthesis.speak(u);
       return;
@@ -601,12 +624,32 @@ function jcReply(m) {
   }
   if (talk) jcTalkNext();
 }
+function jcVoices() { try { return speechSynthesis.getVoices() || []; } catch { return []; } }
+function jcPickVoice(bn) {
+  const all = jcVoices();
+  const want = bn ? cfg.jcVoiceBn : cfg.jcVoiceEn;
+  let v = all.find((x) => x.voiceURI === want);
+  if (!v) v = all.find((x) => (bn ? /^bn/i : /^en/i).test(x.lang));
+  return v || null;
+}
+function jcFillVoices() {
+  const all = jcVoices();
+  const fill = (sel, re, cur, key) => {
+    const list = all.filter((v) => re.test(v.lang));
+    sel.innerHTML = '<option value="">Auto</option>' + list.map((v) => `<option value="${v.voiceURI.replace(/"/g, '&quot;')}">${v.name} (${v.lang})</option>`).join('');
+    sel.value = list.some((v) => v.voiceURI === cur) ? cur : '';
+    sel.onchange = () => { cfg[key] = sel.value; saveCfg(); try { const u = new SpeechSynthesisUtterance(key === 'jcVoiceBn' ? 'আমি জেসি' : 'I am JC'); const v = jcPickVoice(key === 'jcVoiceBn'); if (v) { u.voice = v; u.lang = v.lang; } speechSynthesis.cancel(); speechSynthesis.speak(u); } catch {} };
+  };
+  fill($('#jcVoiceBn'), /^bn/i, cfg.jcVoiceBn, 'jcVoiceBn');
+  fill($('#jcVoiceEn'), /^en/i, cfg.jcVoiceEn, 'jcVoiceEn');
+}
+try { speechSynthesis.addEventListener('voiceschanged', jcFillVoices); } catch {}
 function jcTalkNext() {
   setTimeout(() => { if (cfg.jcTalk && !$('#sheetJC').hidden && !jcRec) $('#jcMic').click(); }, 450);
 }
 function jcRenderLang() { $('#jcLang').textContent = cfg.jcLang === 'en-US' ? 'EN' : 'BN'; }
 $('#btnJC').addEventListener('click', () => {
-  openSheet('JC'); jcRenderLang(); $('#jcSpeak').checked = !!cfg.jcSpeak; $('#jcTalk').checked = !!cfg.jcTalk;
+  openSheet('JC'); jcRenderLang(); jcFillVoices(); $('#jcSpeak').checked = !!cfg.jcSpeak; $('#jcTalk').checked = !!cfg.jcTalk;
   if (!jcLog.children.length) jcAdd('jc', 'Ami JC. Likho ba mic chepe bolo. "help" likhle sob command dekhabo.');
 });
 $('#jcForm').addEventListener('submit', (e) => { e.preventDefault(); jcSend(jcIn.value); jcIn.value = ''; });

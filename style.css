@@ -213,3 +213,5 @@ main.nokb .area-kb{display:none}
 .jc-send{background:var(--accent)!important;color:var(--on);border-color:var(--accent)!important}
 .jc-mic.on{background:var(--danger);color:var(--on);border-color:var(--danger);animation:jcp 1s infinite}
 @keyframes jcp{50%{opacity:.55}}
+.field select{height:44px;padding:0 10px;background:var(--bg);border:1px solid var(--line-strong);border-radius:6px;color:var(--text);font:600 13px var(--sans);width:100%}
+.jc-box{overflow-y:auto}
