@@ -190,3 +190,26 @@ main.nokb .area-kb{display:none}
   main.nokb .area-scr{min-height:0}
   main.nokb .scr-box{aspect-ratio:auto;height:100%;max-height:none}
 }
+
+/* JC assistant */
+.jc-fab{position:absolute;left:14px;top:12px;z-index:3;height:24px;padding:0 9px;border-radius:5px;
+  background:var(--accent);color:var(--on);border:0;font:800 11px var(--mono);letter-spacing:.14em}
+.jc-fab:active{filter:brightness(.85)}
+.jc-box{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto auto auto;overflow-x:hidden}
+.jc-box h3 small{font-weight:600;letter-spacing:.1em;margin-left:6px}
+.jc-log{min-height:120px;max-height:34dvh;overflow:auto;display:flex;flex-direction:column;gap:6px;padding:2px}
+.jc-m{max-width:88%;padding:8px 11px;border-radius:10px;font:600 13px/1.4 var(--sans);white-space:pre-wrap;overflow-wrap:anywhere}
+.jc-m.me{align-self:flex-end;background:var(--accent);color:var(--on);border-bottom-right-radius:3px}
+.jc-m.jc{align-self:flex-start;background:var(--key);border:1px solid var(--line-strong);border-bottom-left-radius:3px}
+.jc-chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.jc-chips::-webkit-scrollbar{display:none}
+.jc-chips button{flex:none;height:32px;padding:0 11px;background:var(--key);border:1px solid var(--line-strong);border-radius:16px;font:800 10px var(--mono);letter-spacing:.1em}
+.jc-chips button:active{background:var(--accent);color:var(--on)}
+.jc-row{display:flex;gap:6px;align-items:center}
+.jc-row input{flex:1;min-width:0;height:46px;padding:0 12px;background:var(--bg);border:1px solid var(--line-strong);border-radius:6px;color:var(--text);font:600 14px var(--sans)}
+.jc-row input:focus{outline:0;border-color:var(--accent)}
+.jc-row button{height:46px;min-width:46px;display:grid;place-items:center;background:var(--key);border:1px solid var(--line-strong);border-radius:6px}
+.jc-lang{font:800 11px var(--mono);letter-spacing:.08em}
+.jc-send{background:var(--accent)!important;color:var(--on);border-color:var(--accent)!important}
+.jc-mic.on{background:var(--danger);color:var(--on);border-color:var(--danger);animation:jcp 1s infinite}
+@keyframes jcp{50%{opacity:.55}}

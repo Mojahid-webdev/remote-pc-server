@@ -107,6 +107,7 @@ function onMsg(m) {
     }
     case 'cur': cur = { x: m.x, y: m.y }; break;
     case 'toast': toast(m.text); break;
+    case 'jcr': jcReply(m); break;
     case 'clip': onClip(m.text); break;
     case 'wake_sent':
       toast(m.helpers ? `Wake sent via ${m.helpers} helper${m.helpers > 1 ? 's' : ''}…` : 'No helper online. Open Termux on the helper phone.', 3500);
@@ -564,6 +565,57 @@ ghost.addEventListener('keydown', (e) => {
 });
 $('#bNative').addEventListener('pointerdown', (e) => {
   e.preventDefault(); resetGhost(); ghost.focus();
+});
+
+/* ================= JC assistant ================= */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const jcLog = $('#jcLog'), jcIn = $('#jcIn');
+function jcAdd(kind, text) {
+  const d = document.createElement('div');
+  d.className = 'jc-m ' + kind; d.textContent = text;
+  jcLog.appendChild(d); jcLog.scrollTop = jcLog.scrollHeight;
+  while (jcLog.children.length > 40) jcLog.removeChild(jcLog.firstChild);
+}
+function jcSend(q) {
+  q = (q || '').trim().slice(0, 300);
+  if (!q) return;
+  jcAdd('me', q);
+  if (!state.agent) return jcAdd('jc', 'PC offline. Age PC on koro.');
+  tx({ t: 'jc', q, id: String(Date.now()) });
+}
+function jcReply(m) {
+  jcAdd('jc', m.say || (m.ok ? 'Hoye geche.' : 'Hoyni.'));
+  if (cfg.jcSpeak && 'speechSynthesis' in window && m.say) {
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(m.say.split('\n')[0]);
+      u.lang = cfg.jcLang === 'en-US' ? 'en-US' : 'en-IN';
+      speechSynthesis.speak(u);
+    } catch {}
+  }
+}
+function jcRenderLang() { $('#jcLang').textContent = cfg.jcLang === 'en-US' ? 'EN' : 'BN'; }
+$('#btnJC').addEventListener('click', () => {
+  openSheet('JC'); jcRenderLang(); $('#jcSpeak').checked = !!cfg.jcSpeak;
+  if (!jcLog.children.length) jcAdd('jc', 'Ami JC. Likho ba mic chepe bolo. "help" likhle sob command dekhabo.');
+});
+$('#jcForm').addEventListener('submit', (e) => { e.preventDefault(); jcSend(jcIn.value); jcIn.value = ''; });
+$('#jcChips').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) jcSend(b.dataset.q); });
+$('#jcLang').addEventListener('click', () => { cfg.jcLang = cfg.jcLang === 'en-US' ? 'bn-BD' : 'en-US'; saveCfg(); jcRenderLang(); });
+$('#jcSpeak').addEventListener('change', (e) => { cfg.jcSpeak = e.target.checked; saveCfg(); });
+let jcRec = null;
+$('#jcMic').addEventListener('click', () => {
+  if (!SR) return toast('Ei browser-e voice nei. Chrome use koro.', 3000);
+  if (jcRec) { try { jcRec.stop(); } catch {} return; }
+  const r = new SR();
+  r.lang = cfg.jcLang === 'en-US' ? 'en-US' : 'bn-BD';
+  r.interimResults = false; r.maxAlternatives = 1;
+  $('#jcMic').classList.add('on');
+  r.onresult = (ev) => { const t = ev.results[0][0].transcript; jcSend(t); };
+  r.onerror = (ev) => toast('Mic: ' + (ev.error === 'not-allowed' ? 'permission dao' : ev.error), 3000);
+  r.onend = () => { jcRec = null; $('#jcMic').classList.remove('on'); };
+  jcRec = r;
+  try { r.start(); } catch { jcRec = null; $('#jcMic').classList.remove('on'); }
 });
 
 /* ================= sheets ================= */

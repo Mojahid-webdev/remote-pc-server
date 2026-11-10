@@ -47,6 +47,7 @@
       <div id="scrBox" class="scr-box">
         <canvas id="scr"></canvas>
         <i class="c tl"></i><i class="c tr"></i><i class="c bl"></i><i class="c br"></i>
+        <button class="jc-fab" id="btnJC" type="button" aria-label="JC assistant">JC</button>
         <div class="hud">
           <button class="hchip btn" id="hZoom" type="button">ZOOM CIRCLE</button>
           <span class="hchip" id="hFps">0 FPS</span>
@@ -158,6 +159,36 @@
     </div>
     <button class="s-btn" id="bSave">SAVE</button>
     <button class="s-btn ghost" id="bSignout">SIGN OUT / CHANGE TOKEN</button>
+  </div>
+</div>
+
+<div id="sheetJC" class="sheet" hidden>
+  <div class="sheet-bg" data-close></div>
+  <div class="sheet-box jc-box">
+    <h3>JC <small class="mut">assistant</small></h3>
+    <div id="jcLog" class="jc-log"></div>
+    <div class="jc-chips" id="jcChips">
+      <button type="button" data-q="chrome khulo">CHROME</button>
+      <button type="button" data-q="downloads kholo">DOWNLOADS</button>
+      <button type="button" data-q="volume barao">VOL +</button>
+      <button type="button" data-q="volume kamao">VOL −</button>
+      <button type="button" data-q="mute">MUTE</button>
+      <button type="button" data-q="pause">PLAY/PAUSE</button>
+      <button type="button" data-q="desktop">DESKTOP</button>
+      <button type="button" data-q="lock">LOCK</button>
+      <button type="button" data-q="help">HELP</button>
+    </div>
+    <form id="jcForm" class="jc-row" autocomplete="off">
+      <button type="button" id="jcLang" class="jc-lang" aria-label="Voice language">BN</button>
+      <input id="jcIn" type="text" placeholder="JC ke bolo… (chrome khulo)" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send">
+      <button type="button" id="jcMic" class="jc-mic" aria-label="Voice">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+      </button>
+      <button type="submit" class="jc-send" aria-label="Send">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </button>
+    </form>
+    <label class="check"><input id="jcSpeak" type="checkbox"> JC jore bole shonabe (phone speaker)</label>
   </div>
 </div>
 

@@ -198,7 +198,7 @@ function cleanInfo(m) {
 // message types a phone may send to the PC agent
 const TO_AGENT = new Set([
   'm', 'abs', 'c', 'md', 'mu', 'sc', 'txt', 'k',
-  'copy', 'paste', 'setclip', 'power', 'getinfo', 'fack',
+  'copy', 'paste', 'setclip', 'power', 'getinfo', 'fack', 'jc',
 ]);
 
 function route(ws, msg, raw) {
@@ -216,7 +216,7 @@ function route(ws, msg, raw) {
     }
     if (TO_AGENT.has(msg.t)) {
       if (agent && agent.readyState === 1) agent.send(raw);
-      else if (['power', 'copy', 'paste', 'setclip'].includes(msg.t))
+      else if (['power', 'copy', 'paste', 'setclip', 'jc'].includes(msg.t))
         sendJSON(ws, { t: 'toast', text: 'PC offline' });
       return;
     }
@@ -239,6 +239,10 @@ function route(ws, msg, raw) {
     }
     if (msg.t === 'clip') {
       const out = { t: 'clip', text: str(msg.text, 30000) };
+      return phones.forEach((p) => sendJSON(p, out));
+    }
+    if (msg.t === 'jcr') {
+      const out = { t: 'jcr', id: str(msg.id, 40), ok: !!msg.ok, say: str(msg.say, 600) };
       return phones.forEach((p) => sendJSON(p, out));
     }
     if (msg.t === 'cur') {
