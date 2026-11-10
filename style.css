@@ -220,3 +220,6 @@ main.nokb .area-kb{display:none}
 .scr-box:fullscreen{max-height:none;width:100vw;height:100vh;aspect-ratio:auto;border:0;border-radius:0;background:#000}
 .scr-box:-webkit-full-screen{max-height:none;width:100vw;height:100vh;aspect-ratio:auto;border:0;border-radius:0;background:#000}
 .scr-box:fullscreen .c,.scr-box:fullscreen .jc-fab{display:none}
+
+.ai-in{width:100%;height:42px;margin-top:6px;padding:0 10px;background:var(--bg);color:var(--fg,#e8ece4);border:1px solid var(--line,#2a2f2a);border-radius:10px;font:500 14px var(--mono,monospace)}
+#aiOut{margin-top:6px;font-size:12px;line-height:1.4}

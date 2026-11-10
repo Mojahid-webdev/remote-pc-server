@@ -648,6 +648,7 @@ function jcWake() {
 }
 function jcReply(m) {
   if (m.id && !jcMine.has(m.id)) return; // another phone/tab asked: don't log or speak it here
+  if (String(m.id || '').startsWith('ai')) { const o = $('#aiOut'); if (o) o.textContent = m.say || ''; toast(m.say || '', 4000); return; }
   const say = m.say || (m.ok ? 'Hoye geche.' : 'Hoyni.');
   jcAdd('jc', say);
   const talk = !!cfg.jcTalk;
@@ -847,6 +848,19 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catc
 applyTheme(); renderView(); buildKb(); renderStatus(); sizeCanvas(); keepAwake();
 requestAnimationFrame(loop);
 connect();
+/* JC AI connectors: the key goes straight to the PC agent (saved there in ai_keys.json), never stored on this phone */
+function aiSend(t) {
+  if (!state.agent) return toast('PC offline: PC on thakle key save hobe');
+  const id = 'ai' + Date.now();
+  jcMine.add(id);
+  const m = { t, id, p: $('#aiProv').value };
+  if (t === 'aikey') { m.key = $('#aiKey').value.trim(); m.model = $('#aiModel').value.trim(); }
+  tx(m);
+  $('#aiOut').textContent = 'PC-te pathalam, test hocche...';
+  $('#aiKey').value = '';
+}
+$('#bAiSave') && $('#bAiSave').addEventListener('click', () => aiSend('aikey'));
+$('#bAiMain') && $('#bAiMain').addEventListener('click', () => aiSend('aiset'));
 /* helper phone app: hand it the relay address + token through a deep link (nothing leaves this phone) */
 $('#bHelperLink') && $('#bHelperLink').addEventListener('click', () => {
   if (!token) return toast('Age token diye sign in koro');

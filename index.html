@@ -158,6 +158,23 @@
       <input id="macInput" type="text" placeholder="AA:BB:CC:DD:EE:FF" autocapitalize="characters" spellcheck="false">
       <div id="adapters" class="adapters"></div>
     </div>
+    <div class="field">JC AI connectors <small class="mut">(key shudhu PC-te save hoy)</small>
+      <select id="aiProv" class="ai-in">
+        <option value="groq">Groq (free)</option>
+        <option value="cerebras">Cerebras (free)</option>
+        <option value="openrouter">OpenRouter (free models)</option>
+        <option value="mistral">Mistral (free tier)</option>
+        <option value="gemini">Google Gemini</option>
+        <option value="deepseek">DeepSeek (paid, cheap)</option>
+        <option value="openai">OpenAI ChatGPT (paid)</option>
+        <option value="anthropic">Anthropic Claude (paid)</option>
+      </select>
+      <input id="aiKey" class="ai-in" type="password" placeholder="API key paste koro (khali = muche dao)" autocomplete="off" spellcheck="false">
+      <input id="aiModel" class="ai-in" type="text" placeholder="Model (optional)" autocomplete="off" spellcheck="false">
+      <button class="s-btn accent" type="button" id="bAiSave">SAVE + TEST KEY</button>
+      <button class="s-btn" type="button" id="bAiMain">EI AI KE MAIN KORO</button>
+      <div id="aiOut" class="mut"></div>
+    </div>
     <div class="field">Helper phone (Power On)
       <a class="s-btn" href="https://github.com/Mojahid-webdev/remote-pc-server/releases/download/helper-latest/jc-helper.apk">1. DOWNLOAD HELPER APP <small>install on the spare phone</small></a>
       <button class="s-btn accent" type="button" id="bHelperLink">2. CONNECT HELPER APP <small>on that phone</small></button>

@@ -198,7 +198,7 @@ function cleanInfo(m) {
 // message types a phone may send to the PC agent
 const TO_AGENT = new Set([
   'm', 'abs', 'c', 'md', 'mu', 'sc', 'txt', 'k',
-  'copy', 'paste', 'setclip', 'power', 'getinfo', 'fack', 'jc',
+  'copy', 'paste', 'setclip', 'power', 'getinfo', 'fack', 'jc', 'aikey', 'aiset',
 ]);
 
 function route(ws, msg, raw) {
