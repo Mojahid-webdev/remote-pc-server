@@ -9,15 +9,27 @@ const LS = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
 const cfg = Object.assign(
-  { sens: 1.4, scroll: 1.0, natural: true, tap: true, mode: 'rel', mac: '', zi: 2, auto: true, live: true, qual: 1 },
+  { sens: 1.4, scroll: 1.0, natural: true, tap: true, mode: 'rel', mac: '', zi: 2, zoomOn: true, auto: true, live: true, qual: 1, theme: 'dark', accent: '#c8ff3e' },
   LS.get('cfg', {})
 );
 const saveCfg = () => LS.set('cfg', cfg);
 let token = LS.get('token', '');
 
 const ZL = [1, 1.5, 2, 3, 4, 6];
-const QUAL = [{ w: 640, q: 45, fps: 10 }, { w: 960, q: 55, fps: 12 }, { w: 1280, q: 65, fps: 14 }];
+const QUAL = [{ w: 800, q: 52, fps: 12 }, { w: 1280, q: 70, fps: 16 }, { w: 1600, q: 80, fps: 18 }];
 
+function applyTheme() {
+  const r = document.documentElement, a = /^#[0-9a-f]{6}$/i.test(cfg.accent) ? cfg.accent : '#c8ff3e';
+  r.dataset.theme = cfg.theme === 'light' ? 'light' : 'dark';
+  const n = parseInt(a.slice(1), 16), R = n >> 16, G = (n >> 8) & 255, B = n & 255;
+  const lum = (0.299 * R + 0.587 * G + 0.114 * B) / 255;
+  r.style.setProperty('--accent', a);
+  r.style.setProperty('--accent-dim', `color-mix(in srgb, ${a} 55%, ${cfg.theme === 'light' ? '#fff' : '#000'})`);
+  r.style.setProperty('--on', lum > 0.55 ? '#0a0c0b' : '#ffffff');
+  const m = document.querySelector('meta[name=theme-color]');
+  if (m) m.content = cfg.theme === 'light' ? '#f1f3ef' : '#0a0c0b';
+  dirty = true;
+}
 const buzz = (ms) => { try { navigator.vibrate && navigator.vibrate(ms); } catch {} };
 let toastTimer = 0;
 function toast(msg, ms = 2400) {
@@ -89,11 +101,11 @@ function onMsg(m) {
       state.agent = m.agent; state.agentName = m.agentName || '';
       state.helpers = m.helpers || []; state.info = m.info;
       if (!state.agent) clearScreen();
-      renderStatus(); renderAdapters(); sendView();
+      autoMac(); renderStatus(); renderAdapters(); sendView();
       if (!was && state.agent && wakePending) { wakePending = 0; toast('PC is online ✓', 3500); buzz([30, 40, 30]); }
       break;
     }
-    case 'cur': cur = { x: m.x, y: m.y }; break;
+    case 'cur': if (!(reg && reg.sw / reg.rw > 1.05)) cur = { x: m.x, y: m.y }; break;
     case 'toast': toast(m.text); break;
     case 'clip': onClip(m.text); break;
     case 'wake_sent':
@@ -102,6 +114,14 @@ function onMsg(m) {
     case 'wake_ack':
       if (!m.ok) toast(`${m.name}: ${m.error || 'wake failed'}`, 3500);
       break;
+  }
+}
+function autoMac() {
+  const list = (state.info && state.info.adapters) || [];
+  if (!list.length) return;
+  const best = list.find((a) => /ethernet|lan/i.test(a.name) && normMac(a.mac)) || list.find((a) => normMac(a.mac));
+  if (best && normMac(best.mac) !== normMac(cfg.mac) && !cfg.macManual) {
+    cfg.mac = normMac(best.mac); saveCfg();
   }
 }
 function renderStatus() {
@@ -129,7 +149,7 @@ function sendView() {
   const want = viewWanted();
   if (want) {
     const q = QUAL[cfg.qual] || QUAL[1];
-    tx({ t: 'view', on: true, z: ZL[cfg.zi], auto: cfg.auto, w: q.w, q: q.q, fps: q.fps, sid });
+    tx({ t: 'view', on: true, z: cfg.zoomOn ? ZL[cfg.zi] : 1, auto: cfg.zoomOn && cfg.auto, w: q.w, q: q.q, fps: q.fps, sid });
   } else if (wasViewing) {
     tx({ t: 'view', on: false });
   }
@@ -154,16 +174,20 @@ function updateEmpty() {
 }
 
 function onFrame(buf) {
-  if (!(buf instanceof ArrayBuffer) || buf.byteLength < 20) return; // 18-byte header + JPEG
+  if (!(buf instanceof ArrayBuffer) || buf.byteLength < 24) return;
   const dv = new DataView(buf);
-  if (dv.getUint8(0) !== 0x46 || dv.getUint8(1) !== 0x31) return; // 'F1'
+  if (dv.getUint8(0) !== 0x46) return; // 'F'
+  const ver = dv.getUint8(1); // '1' = 18-byte header, '2' = 22-byte header with cursor at capture time
+  if (ver !== 0x31 && ver !== 0x32) return;
   const seq = dv.getUint32(2, true);
   tx({ t: 'fack', s: seq }); // ack at once: the agent may send the next frame while we decode
   fpsCount++;
+  const hl = ver === 0x32 ? 22 : 18;
   latest = {
     reg: { rx: dv.getUint16(6, true), ry: dv.getUint16(8, true), rw: dv.getUint16(10, true) || 1, rh: dv.getUint16(12, true) || 1,
            sw: dv.getUint16(14, true) || 1, sh: dv.getUint16(16, true) || 1 },
-    jpg: buf.slice(18),
+    fcur: ver === 0x32 ? { x: dv.getUint16(18, true), y: dv.getUint16(20, true) } : null,
+    jpg: buf.slice(hl),
   };
   decode();
 }
@@ -176,6 +200,7 @@ async function decode() {
       const bmp = await createImageBitmap(new Blob([f.jpg], { type: 'image/jpeg' }));
       try { frame && frame.close && frame.close(); } catch {}
       frame = bmp; reg = f.reg; dirty = true;
+      if (f.fcur && reg.sw / reg.rw > 1.05) { cur = f.fcur; disp = { x: f.fcur.x, y: f.fcur.y }; } // zoomed: cursor locked to the picture
       $('#hZoom').textContent = 'ZOOM ' + (+(reg.sw / reg.rw).toFixed(1)) + '×';
       updateEmpty();
     } catch {}
@@ -195,8 +220,9 @@ function drawCursor(c, px, py, u) {
   c.save();
   c.translate(px, py);
   c.beginPath();
-  c.arc(0, 0, 13 * u, 0, 6.2832);
-  c.strokeStyle = 'rgba(200,255,62,.55)'; c.lineWidth = 2 * u; c.stroke();
+  const zoomed = reg && reg.sw / reg.rw > 1.05;
+  c.arc(0, 0, (zoomed ? 30 : 13) * u, 0, 6.2832);
+  c.strokeStyle = cfg.accent; c.lineWidth = (zoomed ? 1 : 2) * u; c.stroke();
   c.beginPath();
   [[0, 0], [0, 17], [4.5, 13], [8, 21], [11, 19.5], [7.5, 12], [13, 12]].forEach(([x, y], i) => (i ? c.lineTo(x * s, y * s) : c.moveTo(x * s, y * s)));
   c.closePath();
@@ -223,7 +249,7 @@ function loop() {
   if (cur) {
     if (!disp) { disp = { x: cur.x, y: cur.y }; dirty = true; }
     const dx = cur.x - disp.x, dy = cur.y - disp.y;
-    if (Math.abs(dx) > 0.25 || Math.abs(dy) > 0.25) { disp.x += dx * 0.5; disp.y += dy * 0.5; dirty = true; }
+    if (Math.abs(dx) > 0.25 || Math.abs(dy) > 0.25) { disp.x += dx * 0.65; disp.y += dy * 0.65; dirty = true; }
   }
   if (!dirty) return;
   dirty = false;
@@ -233,35 +259,21 @@ setInterval(() => { $('#hFps').textContent = fpsCount + ' FPS'; fpsCount = 0; },
 if (window.ResizeObserver) new ResizeObserver(sizeCanvas).observe($('#scrBox'));
 window.addEventListener('resize', sizeCanvas);
 
-/* zoom + view controls */
+/* zoom + view controls (all configured in settings) */
 function renderView() {
-  $('#hAuto').classList.toggle('on', cfg.auto);
-  $('#hEye').classList.toggle('on', cfg.live);
-  $('#hEye').textContent = cfg.live ? 'LIVE' : 'OFF';
-  if (!reg) $('#hZoom').textContent = 'ZOOM ' + ZL[cfg.zi] + '×';
+  if (!reg) $('#hZoom').textContent = 'ZOOM ' + (cfg.zoomOn ? ZL[cfg.zi] : 1) + '×';
 }
-function setZoom(i) {
-  cfg.zi = Math.min(ZL.length - 1, Math.max(0, i)); saveCfg();
-  renderView(); sendView(); toast('Zoom ' + ZL[cfg.zi] + '×', 900);
-}
-let lastZi = 2;
-$('#hAuto').addEventListener('click', () => {
-  cfg.auto = !cfg.auto; saveCfg(); renderView(); sendView();
-  toast(cfg.auto ? 'Auto zoom-out ON (fast moves show the full screen)' : 'Auto zoom-out OFF');
-});
-$('#hEye').addEventListener('click', () => {
-  cfg.live = !cfg.live; saveCfg();
-  if (!cfg.live) clearScreen();
-  renderView(); sendView(); updateEmpty();
-});
+let lastZoomOn = true;
 $('#scrBox').addEventListener('dblclick', () => {
-  if (cfg.zi > 0) { lastZi = cfg.zi; setZoom(0); } else setZoom(lastZi);
+  cfg.zoomOn = !cfg.zoomOn; saveCfg(); renderView(); sendView();
+  toast(cfg.zoomOn ? 'Zoom on cursor ON' : 'Zoom OFF (full screen)', 900);
 });
 
 /* ================= trackpad ================= */
 const pad = $('#pad');
 const ptrs = new Map();
 let g = null;
+let selMode = false;
 let accX = 0, accY = 0, scX = 0, scY = 0, absP = null, raf = 0;
 
 function flush() {
@@ -293,7 +305,8 @@ pad.addEventListener('pointerdown', (e) => {
   if (ptrs.size === 1) {
     g = { t0: performance.now(), moved: false, max: 1, drag: false, lp: 0 };
     if (cfg.mode === 'abs') queueAbs(e);
-    g.lp = setTimeout(() => {
+    if (selMode) { g.drag = true; tx({ t: 'md', b: 'l' }); pad.classList.add('drag'); }
+    else g.lp = setTimeout(() => {
       if (g && !g.moved && ptrs.size === 1) {
         g.drag = true; tx({ t: 'md', b: 'l' }); buzz(20); pad.classList.add('drag');
       }
@@ -349,6 +362,7 @@ pad.addEventListener('lostpointercapture', endPtr);
 
 function renderMode() {
   $('#modeChip').textContent = cfg.mode === 'abs' ? 'ABS' : 'REL';
+  $('#hintRel').classList.toggle('cur', cfg.mode !== 'abs'); $('#hintAbs').classList.toggle('cur', cfg.mode === 'abs');
   $('#mRel').classList.toggle('on', cfg.mode !== 'abs');
   $('#mAbs').classList.toggle('on', cfg.mode === 'abs');
 }
@@ -376,8 +390,11 @@ function tap(el, fn) {
 }
 tap($('#bCopy'), () => tx({ t: 'copy' }));
 tap($('#bPaste'), () => tx({ t: 'paste' }));
-tap($('#bZm'), () => setZoom(cfg.zi - 1));
-tap($('#bZp'), () => setZoom(cfg.zi + 1));
+tap($('#bAll'), () => tx({ t: 'k', k: 'a', mods: ['ctrl'] }));
+tap($('#bSel'), () => {
+  selMode = !selMode; $('#bSel').classList.toggle('on', selMode);
+  toast(selMode ? 'SELECT ON: drag on trackpad to select text' : 'SELECT OFF', 1200);
+});
 tap($('#bPrt'), () => tx({ t: 'k', k: 'printscreen', mods: [] }));
 
 async function onClip(text) {
@@ -385,27 +402,12 @@ async function onClip(text) {
   try { await navigator.clipboard.writeText(text); toast('Copied to phone: ' + text.replace(/\s+/g, ' ').slice(0, 40)); }
   catch { toast('Copied on PC (phone clipboard blocked)'); }
 }
-$('#bKbToggle').addEventListener('click', () => {
-  const m = $('main'); m.classList.toggle('nokb');
-  $('#bKbToggle').textContent = m.classList.contains('nokb') ? '▴' : '▾';
-  if (m.classList.contains('nokb')) {
-    // tabs live inside the keyboard card: keep a way back
-    toast('Keyboard hidden. Tap SHOW KB to bring it back', 1800);
-    showKbBtn(true);
-  }
-});
-function showKbBtn(on) {
-  let b = $('#kbShow');
-  if (on && !b) {
-    b = document.createElement('button');
-    b.id = 'kbShow'; b.className = 'pill'; b.type = 'button'; b.textContent = 'SHOW KB';
-    b.addEventListener('click', () => {
-      $('main').classList.remove('nokb'); $('#bKbToggle').textContent = '▾'; showKbBtn(false);
-    });
-    $('.pills').appendChild(b);
-    $('.pills').style.gridTemplateColumns = 'repeat(5,1fr)';
-  } else if (!on && b) { b.remove(); $('.pills').style.gridTemplateColumns = ''; }
+function setKb(show) {
+  $('main').classList.toggle('nokb', !show);
+  $('#kbShow').hidden = show;
 }
+$('#bKbToggle').addEventListener('click', () => setKb(false));
+$('#kbShow').addEventListener('click', () => setKb(true));
 
 /* ================= virtual keyboard ================= */
 const kb = $('#kb');
@@ -440,7 +442,7 @@ const LABEL = {
   esc: 'Esc', tab: 'Tab', caps: 'Caps', del: 'Del', ins: 'Ins', home: 'Home', end: 'End', pgup: 'PgUp', pgdn: 'PgDn',
   left: '◀', up: '▲', down: '▼', right: '▶', vold: 'Vol−', volu: 'Vol+', mute: 'Mute', play: '⏯',
   alttab: 'Alt+Tab', wind: 'Win+D', tmgr: 'TaskMgr', snip: 'Snip', cut: 'Cut', undo: 'Undo', all: 'All',
-  bksp: '⌫', shift: '⇧', enter: '⏎', space: '', ctrl: 'Ctrl', alt: 'Alt', win: 'Win',
+  bksp: '⌫', shift: '⇧', enter: 'Enter', space: '', ctrl: 'Ctrl', alt: 'Alt', win: 'Win',
 };
 const MACRO = new Set(['vold', 'volu', 'mute', 'play', 'alttab', 'wind', 'tmgr', 'snip', 'cut', 'undo', 'all']);
 const WIDE = { shift: 'w15', bksp: 'w15', ctrl: 'w15', alt: 'w15', win: 'w15', enter: 'w2', space: 'w4' };
@@ -580,7 +582,7 @@ $$('[data-power]').forEach((btn) => btn.addEventListener('click', () => {
   closeSheets();
 }));
 $('[data-wake]').addEventListener('click', () => {
-  if (!normMac(cfg.mac)) { closeSheets(); loadSettingsUI(); openSheet('Set'); return toast('Set the PC MAC address first'); }
+  if (!normMac(cfg.mac)) { closeSheets(); return toast('MAC not saved yet. Turn the PC on once; it is detected and saved automatically.', 4500); }
   tx({ t: 'wake', mac: normMac(cfg.mac), id: String(Date.now()) });
   wakePending = Date.now();
   closeSheets();
@@ -597,12 +599,26 @@ function loadSettingsUI() {
   $('#rSens').value = cfg.sens; $('#oSens').textContent = cfg.sens.toFixed(1);
   $('#rScroll').value = cfg.scroll; $('#oScroll').textContent = cfg.scroll.toFixed(1);
   $('#cNatural').checked = cfg.natural; $('#cTap').checked = cfg.tap; $('#cAuto').checked = cfg.auto;
+  $('#cLive').checked = cfg.live; $('#cZoom').checked = cfg.zoomOn; renderZl(); renderThemeUI();
   $('#macInput').value = cfg.mac; renderMode(); renderQual(); renderAdapters();
 }
 $('#rSens').addEventListener('input', (e) => { cfg.sens = +e.target.value; $('#oSens').textContent = cfg.sens.toFixed(1); saveCfg(); });
 $('#rScroll').addEventListener('input', (e) => { cfg.scroll = +e.target.value; $('#oScroll').textContent = cfg.scroll.toFixed(1); saveCfg(); });
 $('#cNatural').addEventListener('change', (e) => { cfg.natural = e.target.checked; saveCfg(); });
 $('#cTap').addEventListener('change', (e) => { cfg.tap = e.target.checked; saveCfg(); });
+function renderZl() { $$('[data-z]').forEach((b) => b.classList.toggle('on', +b.dataset.z === cfg.zi - 1)); }
+function renderThemeUI() {
+  $('#thDark').classList.toggle('on', cfg.theme !== 'light'); $('#thLight').classList.toggle('on', cfg.theme === 'light');
+  $$('.sw').forEach((b) => b.classList.toggle('on', b.dataset.c.toLowerCase() === cfg.accent.toLowerCase()));
+  $('#cCustom').value = cfg.accent;
+}
+$('#cLive').addEventListener('change', (e) => { cfg.live = e.target.checked; saveCfg(); if (!cfg.live) clearScreen(); sendView(); updateEmpty(); });
+$('#cZoom').addEventListener('change', (e) => { cfg.zoomOn = e.target.checked; saveCfg(); renderView(); sendView(); });
+$$('[data-z]').forEach((b) => b.addEventListener('click', () => { cfg.zi = +b.dataset.z + 1; cfg.zoomOn = true; $('#cZoom').checked = true; saveCfg(); renderZl(); renderView(); sendView(); }));
+$('#thDark').addEventListener('click', () => { cfg.theme = 'dark'; saveCfg(); applyTheme(); renderThemeUI(); });
+$('#thLight').addEventListener('click', () => { cfg.theme = 'light'; saveCfg(); applyTheme(); renderThemeUI(); });
+$$('.sw').forEach((b) => b.addEventListener('click', () => { cfg.accent = b.dataset.c; saveCfg(); applyTheme(); renderThemeUI(); }));
+$('#cCustom').addEventListener('input', (e) => { cfg.accent = e.target.value; saveCfg(); applyTheme(); renderThemeUI(); });
 $('#cAuto').addEventListener('change', (e) => { cfg.auto = e.target.checked; saveCfg(); renderView(); sendView(); });
 $('#mRel').addEventListener('click', () => { cfg.mode = 'rel'; saveCfg(); renderMode(); });
 $('#mAbs').addEventListener('click', () => { cfg.mode = 'abs'; saveCfg(); renderMode(); });
@@ -610,7 +626,7 @@ $$('[data-q]').forEach((b) => b.addEventListener('click', () => { cfg.qual = +b.
 $('#bSave').addEventListener('click', () => {
   const raw = $('#macInput').value.trim();
   if (raw && !normMac(raw)) return toast('MAC must be 12 hex digits (AA:BB:CC:DD:EE:FF)');
-  cfg.mac = normMac(raw); saveCfg(); toast('Saved'); closeSheets();
+  cfg.mac = normMac(raw); cfg.macManual = !!cfg.mac; saveCfg(); toast('Saved'); closeSheets();
 });
 $('#bSignout').addEventListener('click', () => {
   token = ''; LS.set('token', ''); try { ws.close(); } catch {} closeSheets(); showLogin('Paste your access token to pair this phone.');
@@ -660,7 +676,7 @@ document.addEventListener('visibilitychange', () => {
 });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
-renderMode(); renderView(); buildKb(); renderStatus(); sizeCanvas(); keepAwake();
+applyTheme(); renderMode(); renderView(); buildKb(); renderStatus(); sizeCanvas(); keepAwake();
 requestAnimationFrame(loop);
 connect();
 })();

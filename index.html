@@ -10,6 +10,8 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -47,8 +49,6 @@
         <i class="c tl"></i><i class="c tr"></i><i class="c bl"></i><i class="c br"></i>
         <div class="hud">
           <span class="hchip" id="hZoom">ZOOM 2×</span>
-          <button class="hchip btn" id="hAuto" type="button">AUTO</button>
-          <button class="hchip btn" id="hEye" type="button">LIVE</button>
           <span class="hchip" id="hFps">0 FPS</span>
         </div>
         <div id="scrEmpty" class="scr-empty">PC OFFLINE</div>
@@ -63,27 +63,29 @@
         <button class="tab" data-layer="sp" type="button">SPECIAL</button>
         <i class="grow"></i>
         <button class="tab key" id="bPrt" type="button">PrtSc</button>
-        <button class="tab key" id="bNative" type="button">⌨ PHONE</button>
-        <button class="tab key" id="bKbToggle" type="button">▾</button>
+        <button class="tab key" id="bNative" type="button"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg> PHONE</button>
+        <button class="tab key" id="bKbToggle" type="button" aria-label="Hide keyboard"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
       </div>
       <div id="kb"></div>
     </section>
 
     <!-- 3. buttons + trackpad -->
     <section class="area-ctl">
+      <button class="kbbar" id="kbShow" type="button" hidden><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg><span>SHOW KEYBOARD</span><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg></button>
       <div class="pills">
         <button class="pill" id="bCopy" type="button">COPY</button>
         <button class="pill" id="bPaste" type="button">PASTE</button>
-        <button class="pill" id="bZm" type="button">ZOOM −</button>
-        <button class="pill" id="bZp" type="button">ZOOM +</button>
+        <button class="pill" id="bSel" type="button">SELECT</button>
+        <button class="pill" id="bAll" type="button">SELECT ALL</button>
       </div>
       <div id="pad">
         <i class="c tl"></i><i class="c tr"></i><i class="c bl"></i><i class="c br"></i>
         <button id="modeChip" class="mode-chip" type="button">REL</button>
         <div class="pad-hint">
           <b>TRACKPAD</b>
-          <span>tap = click · 2-finger tap = right click</span>
-          <span>2-finger drag = scroll · hold = drag</span>
+          <span id="hintRel"><em>REL</em> slide = move cursor · tap = click</span>
+          <span id="hintAbs"><em>ABS</em> cursor jumps to where you touch</span>
+          <span>2-finger tap = right click · 2-finger drag = scroll · hold = drag</span>
         </div>
       </div>
       <div class="lr">
@@ -131,7 +133,29 @@
         <button type="button" data-q="2">SHARP</button>
       </div>
     </div>
+    <label class="check"><input id="cLive" type="checkbox"> Show PC screen (live)</label>
+    <label class="check"><input id="cZoom" type="checkbox"> Zoom on cursor (phone view only)</label>
+    <div class="field">Zoom level
+      <div class="seg" id="zlSeg">
+        <button type="button" data-z="1">1.5×</button><button type="button" data-z="2">2×</button>
+        <button type="button" data-z="3">3×</button><button type="button" data-z="4">4×</button>
+      </div>
+    </div>
     <label class="check"><input id="cAuto" type="checkbox"> Auto zoom-out while the cursor moves fast</label>
+    <div class="field">Theme
+      <div class="seg"><button type="button" id="thDark">DARK</button><button type="button" id="thLight">LIGHT</button></div>
+    </div>
+    <div class="field">Accent colour
+      <div class="swatches" id="swatches">
+        <button class="sw" type="button" data-c="#c8ff3e" style="background:#c8ff3e" aria-label="Volt green"></button>
+        <button class="sw" type="button" data-c="#35e0ff" style="background:#35e0ff" aria-label="Cyan"></button>
+        <button class="sw" type="button" data-c="#ff9a1f" style="background:#ff9a1f" aria-label="Orange"></button>
+        <button class="sw" type="button" data-c="#ff4fa3" style="background:#ff4fa3" aria-label="Pink"></button>
+        <button class="sw" type="button" data-c="#a78bff" style="background:#a78bff" aria-label="Violet"></button>
+        <button class="sw" type="button" data-c="#ffffff" style="background:#ffffff" aria-label="White"></button>
+        <input id="cCustom" type="color" value="#c8ff3e" aria-label="Custom colour">
+      </div>
+    </div>
     <div class="field">PC MAC address (for Power On)
       <input id="macInput" type="text" placeholder="AA:BB:CC:DD:EE:FF" autocapitalize="characters" spellcheck="false">
       <div id="adapters" class="adapters"></div>
