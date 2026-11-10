@@ -586,8 +586,11 @@ function jcSend(q) {
     return jcWake();
   }
   if (!state.agent) return jcAdd('jc', 'PC offline. "pc on koro" bolo, ba Power On chapo.');
-  tx({ t: 'jc', q, id: String(Date.now()) });
+  const id = String(Date.now());
+  jcMine.add(id);
+  tx({ t: 'jc', q, id });
 }
+const jcMine = new Set();
 /* "pc on koro / pc open / পিসি চালু" etc. is handled here on the phone: when the PC is off there is no agent to listen */
 function jcIsPowerOn(q) {
   const t = q.toLowerCase().replace(/[!?,.;]/g, ' ');
@@ -604,6 +607,7 @@ function jcWake() {
   setTimeout(() => { if (wakePending && Date.now() - wakePending > 85000) { wakePending = 0; jcAdd('jc', 'PC ekhono offline. BIOS Wake-on-LAN, LAN cable ar helper phone check koro.'); } }, 90000);
 }
 function jcReply(m) {
+  if (m.id && !jcMine.has(m.id)) return; // another phone/tab asked: don't log or speak it here
   const say = m.say || (m.ok ? 'Hoye geche.' : 'Hoyni.');
   jcAdd('jc', say);
   const talk = !!cfg.jcTalk;
