@@ -49,7 +49,8 @@
         <i class="c tl"></i><i class="c tr"></i><i class="c bl"></i><i class="c br"></i>
         <button class="jc-fab" id="btnJC" type="button" aria-label="JC assistant">JC</button>
         <div class="hud">
-          <button class="hchip btn" id="hZoom" type="button">ZOOM CIRCLE</button>
+          <button class="hchip btn" id="hZoom" type="button">ZOOM 1×</button>
+          <button class="hchip btn" id="hFull" type="button">⛶ FULL</button>
           <span class="hchip" id="hFps">0 FPS</span>
         </div>
         <div id="scrEmpty" class="scr-empty">PC OFFLINE</div>
@@ -114,7 +115,7 @@
   <div class="sheet-box">
     <h3>SETTINGS</h3>
     <label class="field">Pointer speed <output id="oSens"></output>
-      <input id="rSens" type="range" min="0.5" max="3" step="0.1"></label>
+      <input id="rSens" type="range" min="0.5" max="6" step="0.1"></label>
     <label class="field">Scroll speed <output id="oScroll"></output>
       <input id="rScroll" type="range" min="0.3" max="2.5" step="0.1"></label>
     <label class="check"><input id="cNatural" type="checkbox"> Natural scrolling (content follows finger)</label>
@@ -131,12 +132,12 @@
     <div class="field">Zoom circle magnification
       <div class="seg" id="lzSeg">
         <button type="button" data-lz="2">2×</button><button type="button" data-lz="3">3×</button>
-        <button type="button" data-lz="4">4×</button><button type="button" data-lz="5">5×</button>
+        <button type="button" data-lz="4">4×</button><button type="button" data-lz="5">5×</button><button type="button" data-lz="6">6×</button>
       </div>
     </div>
     <div class="field">Zoom circle size
       <div class="seg" id="lrSeg">
-        <button type="button" data-lr="48">SMALL</button><button type="button" data-lr="68">MEDIUM</button><button type="button" data-lr="90">LARGE</button>
+        <button type="button" data-lr="48">SMALL</button><button type="button" data-lr="68">MEDIUM</button><button type="button" data-lr="90">LARGE</button><button type="button" data-lr="120">XL</button>
       </div>
     </div>
     <div class="field">Theme
@@ -156,6 +157,10 @@
     <div class="field">PC MAC address (for Power On)
       <input id="macInput" type="text" placeholder="AA:BB:CC:DD:EE:FF" autocapitalize="characters" spellcheck="false">
       <div id="adapters" class="adapters"></div>
+    </div>
+    <div class="field">Helper phone (Power On)
+      <a class="s-btn" href="https://github.com/Mojahid-webdev/remote-pc-server/releases/download/helper-latest/jc-helper.apk">1. DOWNLOAD HELPER APP <small>install on the spare phone</small></a>
+      <button class="s-btn accent" type="button" id="bHelperLink">2. CONNECT HELPER APP <small>on that phone</small></button>
     </div>
     <button class="s-btn" id="bSave">SAVE</button>
     <button class="s-btn ghost" id="bSignout">SIGN OUT / CHANGE TOKEN</button>

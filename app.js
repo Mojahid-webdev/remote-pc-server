@@ -9,14 +9,16 @@ const LS = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
 const cfg = Object.assign(
-  { sens: 1.4, scroll: 1.0, natural: true, tap: true, mode: 'rel', mac: '', loupe: true, lz: 3, lr: 68, live: true, qual: 1, theme: 'dark', accent: '#c8ff3e' },
+  { sens: 2.4, scroll: 1.0, natural: true, tap: true, mode: 'rel', mac: '', loupe: true, lz: 3, lr: 68, live: true, qual: 1, theme: 'dark', accent: '#c8ff3e' },
   LS.get('cfg', {})
 );
 const saveCfg = () => LS.set('cfg', cfg);
+if (!cfg.m3) { cfg.loupe = false; cfg.z = 1; cfg.m3 = true; saveCfg(); }
+if (!cfg.m2) { cfg.sens = Math.max(cfg.sens, 2.4); cfg.lr = Math.max(cfg.lr, 90); cfg.m2 = true; saveCfg(); }
 let token = LS.get('token', '');
 
 const ZL = [1, 1.5, 2, 3, 4, 6];
-const QUAL = [{ w: 800, q: 52, fps: 12 }, { w: 1280, q: 70, fps: 16 }, { w: 1600, q: 80, fps: 18 }];
+const QUAL = [{ w: 720, q: 45, fps: 8 }, { w: 1024, q: 58, fps: 12 }, { w: 1440, q: 70, fps: 15 }];
 
 function applyTheme() {
   const r = document.documentElement, a = /^#[0-9a-f]{6}$/i.test(cfg.accent) ? cfg.accent : '#c8ff3e';
@@ -158,7 +160,8 @@ function sendView() {
   const want = viewWanted();
   if (want) {
     const q = QUAL[cfg.qual] || QUAL[1];
-    tx({ t: 'view', on: true, z: 1, auto: false, w: q.w, q: q.q, fps: q.fps, lc: loupeCrop(), sid });
+    const mv = !!(document.fullscreenElement || document.webkitFullscreenElement);
+    tx({ t: 'view', on: true, z: cfg.z || 1, auto: false, w: mv ? Math.max(q.w, 1280) : q.w, q: mv ? Math.max(q.q, 62) : q.q, fps: mv ? 20 : q.fps, lc: loupeCrop(), sid });
   } else if (wasViewing) {
     tx({ t: 'view', on: false });
   }
@@ -243,17 +246,17 @@ function sizeCanvas() {
   dirty = true;
 }
 function drawCursor(c, px, py, u) {
-  const s = 1.35 * u;
+  const s = 0.8 * u;
   c.save();
   c.translate(px, py);
   c.beginPath();
-  c.arc(0, 0, 11 * u, 0, 6.2832);
-  c.strokeStyle = cfg.accent; c.lineWidth = 1.5 * u; c.stroke();
+  c.arc(0, 0, 6 * u, 0, 6.2832);
+  c.strokeStyle = cfg.accent; c.lineWidth = 1.2 * u; c.stroke();
   c.beginPath();
   [[0, 0], [0, 17], [4.5, 13], [8, 21], [11, 19.5], [7.5, 12], [13, 12]].forEach(([x, y], i) => (i ? c.lineTo(x * s, y * s) : c.moveTo(x * s, y * s)));
   c.closePath();
   c.fillStyle = '#fff'; c.fill();
-  c.lineWidth = 1.8 * u; c.strokeStyle = '#000'; c.lineJoin = 'round'; c.stroke();
+  c.lineWidth = 1.2 * u; c.strokeStyle = '#000'; c.lineJoin = 'round'; c.stroke();
   c.restore();
 }
 function render() {
@@ -300,14 +303,37 @@ window.addEventListener('resize', sizeCanvas);
 /* zoom circle (the screen itself stays fixed) */
 function renderView() {
   const h = $('#hZoom');
-  h.textContent = cfg.loupe ? 'ZOOM CIRCLE ' + cfg.lz + '×' : 'ZOOM CIRCLE OFF';
-  h.classList.toggle('on', cfg.loupe);
+  h.textContent = 'ZOOM ' + (cfg.z || 1) + '×';
+  h.classList.toggle('on', (cfg.z || 1) > 1);
 }
 function setLoupe(on) {
   cfg.loupe = on; saveCfg(); if (!on) loupeImg = null; dirty = true; renderView(); sendView();
   const c = $('#cLoupe'); if (c) c.checked = on;
 }
-$('#hZoom').addEventListener('click', () => setLoupe(!cfg.loupe));
+/* button zoom: 1x -> 2x -> 3x -> 1x (the picture zooms around the cursor; no circle following the mouse) */
+$('#hZoom').addEventListener('click', () => {
+  const Z = [1, 2, 3];
+  cfg.z = Z[(Z.indexOf(cfg.z || 1) + 1) % Z.length];
+  saveCfg(); renderView(); sendView(); buzz(10);
+});
+/* movie mode: full screen, landscape, smoother picture */
+$('#hFull').addEventListener('click', async () => {
+  const box = $('#scrBox');
+  try {
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      await (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    } else {
+      await (box.requestFullscreen || box.webkitRequestFullscreen).call(box, { navigationUI: 'hide' });
+      try { await screen.orientation.lock('landscape'); } catch {}
+    }
+  } catch { toast('Full screen ei browser-e hoy na'); }
+});
+['fullscreenchange', 'webkitfullscreenchange'].forEach((ev) => document.addEventListener(ev, () => {
+  const on = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  $('#hFull').textContent = on ? '✕ EXIT' : '⛶ FULL';
+  if (!on) { try { screen.orientation.unlock(); } catch {} }
+  sizeCanvas(); sendView();
+}));
 
 /* ================= trackpad ================= */
 const pad = $('#pad');
@@ -355,7 +381,7 @@ pad.addEventListener('pointermove', (e) => {
   if (ptrs.size === 1 && g.max === 1) {
     {
       const sp = Math.hypot(dx, dy);
-      const gain = cfg.sens * Math.min(1 + sp * 0.09, 3.4);
+      const gain = cfg.sens * Math.min(1 + sp * 0.12, 4.5);
       accX += dx * gain; accY += dy * gain; schedule();
     }
   } else if (ptrs.size >= 2) {
@@ -577,20 +603,34 @@ function jcAdd(kind, text) {
   jcLog.appendChild(d); jcLog.scrollTop = jcLog.scrollHeight;
   while (jcLog.children.length > 40) jcLog.removeChild(jcLog.firstChild);
 }
+function jcLocal(say) {
+  const id = 'L' + Date.now() + Math.random();
+  jcMine.add(id);
+  jcReply({ id, ok: true, say });
+}
 function jcSend(q) {
   q = (q || '').trim().slice(0, 300);
   if (!q) return;
   jcAdd('me', q);
   if (jcIsPowerOn(q)) {
-    if (state.agent) return jcAdd('jc', 'PC to ekhon-i chalu ache.');
+    if (state.agent) return jcLocal('PC to ekhon-i chalu ache.');
     return jcWake();
   }
-  if (!state.agent) return jcAdd('jc', 'PC offline. "pc on koro" bolo, ba Power On chapo.');
+  if (!state.agent) return jcLocal('PC ekhon offline, tai ami kaj korte parchhi na. PC chalu korte bolo: pc on koro.');
   const id = String(Date.now());
   jcMine.add(id);
   tx({ t: 'jc', q, id });
 }
 const jcMine = new Set();
+let jcLastSpoken = '', jcSpeakEnd = 0;
+const jcWords = (s) => String(s || '').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean);
+/* the mic can hear the phone's own speaker: drop a transcript that is (mostly) JC's last reply */
+function jcIsEcho(t) {
+  if (Date.now() - jcSpeakEnd < 900) return true;
+  const a = jcWords(t), b = new Set(jcWords(jcLastSpoken));
+  if (!a.length || !b.size || Date.now() - jcSpeakEnd > 20000) return false;
+  return a.filter((w) => b.has(w)).length / a.length >= 0.5;
+}
 /* "pc on koro / pc open / পিসি চালু" etc. is handled here on the phone: when the PC is off there is no agent to listen */
 function jcIsPowerOn(q) {
   const t = q.toLowerCase().replace(/[!?,.;]/g, ' ');
@@ -600,11 +640,11 @@ function jcIsPowerOn(q) {
   return pc.test(t) && on.test(t) && !off.test(t);
 }
 function jcWake() {
-  if (!normMac(cfg.mac)) return jcAdd('jc', 'PC-r MAC address save nei. PC ekbar chalu kore app-e dhukle nijei save hoy.');
+  if (!normMac(cfg.mac)) return jcLocal('PC-r MAC address save nei. PC ekbar chalu kore app-e dhukle nijei save hoy.');
   tx({ t: 'wake', mac: normMac(cfg.mac), id: String(Date.now()) });
   wakePending = Date.now();
-  jcAdd('jc', 'PC chalu korar signal pathalam. 1-2 minute-er moddhe on hole janabo.');
-  setTimeout(() => { if (wakePending && Date.now() - wakePending > 85000) { wakePending = 0; jcAdd('jc', 'PC ekhono offline. BIOS Wake-on-LAN, LAN cable ar helper phone check koro.'); } }, 90000);
+  jcLocal('PC chalu korar signal pathalam. 1-2 minute-er moddhe on hole janabo.');
+  setTimeout(() => { if (wakePending && Date.now() - wakePending > 85000) { wakePending = 0; jcLocal('PC ekhono offline. BIOS Wake-on-LAN, LAN cable ar helper phone check koro.'); } }, 90000);
 }
 function jcReply(m) {
   if (m.id && !jcMine.has(m.id)) return; // another phone/tab asked: don't log or speak it here
@@ -621,7 +661,9 @@ function jcReply(m) {
       u.lang = isBn ? 'bn-BD' : (cfg.jcLang === 'en-US' ? 'en-US' : 'en-IN');
       const v = jcPickVoice(isBn);
       if (v) { u.voice = v; u.lang = v.lang; }
-      if (talk) { u.onend = jcTalkNext; u.onerror = jcTalkNext; }
+      jcLastSpoken = say;
+      u.onend = () => { jcSpeakEnd = Date.now(); if (talk) jcTalkNext(); };
+      u.onerror = () => { jcSpeakEnd = Date.now(); if (talk) jcTalkNext(); };
       speechSynthesis.speak(u);
       return;
     } catch {}
@@ -649,7 +691,7 @@ function jcFillVoices() {
 }
 try { speechSynthesis.addEventListener('voiceschanged', jcFillVoices); } catch {}
 function jcTalkNext() {
-  setTimeout(() => { if (cfg.jcTalk && !$('#sheetJC').hidden && !jcRec) $('#jcMic').click(); }, 450);
+  setTimeout(() => { if (cfg.jcTalk && !$('#sheetJC').hidden && !jcRec) $('#jcMic').click(); }, 1200);
 }
 function jcRenderLang() { $('#jcLang').textContent = cfg.jcLang === 'en-US' ? 'EN' : 'BN'; }
 $('#btnJC').addEventListener('click', () => {
@@ -665,11 +707,12 @@ let jcRec = null;
 $('#jcMic').addEventListener('click', () => {
   if (!SR) return toast('Ei browser-e voice nei. Chrome use koro.', 3000);
   if (jcRec) { try { jcRec.stop(); } catch {} return; }
+  try { speechSynthesis.cancel(); } catch {}
   const r = new SR();
   r.lang = cfg.jcLang === 'en-US' ? 'en-US' : 'bn-BD';
   r.interimResults = false; r.maxAlternatives = 1;
   $('#jcMic').classList.add('on');
-  r.onresult = (ev) => { const t = ev.results[0][0].transcript; jcSend(t); };
+  r.onresult = (ev) => { const t = ev.results[0][0].transcript; if (jcIsEcho(t)) { toast('Nijer awaj dhorechhe, ignore korlam', 1800); return; } jcSend(t); };
   r.onerror = (ev) => toast('Mic: ' + (ev.error === 'not-allowed' ? 'permission dao' : ev.error), 3000);
   r.onend = () => { jcRec = null; $('#jcMic').classList.remove('on'); };
   jcRec = r;
@@ -804,4 +847,12 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catc
 applyTheme(); renderView(); buildKb(); renderStatus(); sizeCanvas(); keepAwake();
 requestAnimationFrame(loop);
 connect();
+/* helper phone app: hand it the relay address + token through a deep link (nothing leaves this phone) */
+$('#bHelperLink') && $('#bHelperLink').addEventListener('click', () => {
+  if (!token) return toast('Age token diye sign in koro');
+  const server = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
+  location.href = 'jchelper://setup?server=' + encodeURIComponent(server) + '&token=' + encodeURIComponent(token) +
+    '&mac=' + encodeURIComponent(normMac(cfg.mac) || '');
+});
 })();
+
