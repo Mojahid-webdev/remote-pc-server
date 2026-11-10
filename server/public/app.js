@@ -577,15 +577,20 @@ function jcAdd(kind, text) {
   jcLog.appendChild(d); jcLog.scrollTop = jcLog.scrollHeight;
   while (jcLog.children.length > 40) jcLog.removeChild(jcLog.firstChild);
 }
+function jcLocal(say) {
+  const id = 'L' + Date.now() + Math.random();
+  jcMine.add(id);
+  jcReply({ id, ok: true, say });
+}
 function jcSend(q) {
   q = (q || '').trim().slice(0, 300);
   if (!q) return;
   jcAdd('me', q);
   if (jcIsPowerOn(q)) {
-    if (state.agent) return jcAdd('jc', 'PC to ekhon-i chalu ache.');
+    if (state.agent) return jcLocal('PC to ekhon-i chalu ache.');
     return jcWake();
   }
-  if (!state.agent) return jcAdd('jc', 'PC offline. "pc on koro" bolo, ba Power On chapo.');
+  if (!state.agent) return jcLocal('PC ekhon offline, tai ami kaj korte parchhi na. PC chalu korte bolo: pc on koro.');
   const id = String(Date.now());
   jcMine.add(id);
   tx({ t: 'jc', q, id });
@@ -609,11 +614,11 @@ function jcIsPowerOn(q) {
   return pc.test(t) && on.test(t) && !off.test(t);
 }
 function jcWake() {
-  if (!normMac(cfg.mac)) return jcAdd('jc', 'PC-r MAC address save nei. PC ekbar chalu kore app-e dhukle nijei save hoy.');
+  if (!normMac(cfg.mac)) return jcLocal('PC-r MAC address save nei. PC ekbar chalu kore app-e dhukle nijei save hoy.');
   tx({ t: 'wake', mac: normMac(cfg.mac), id: String(Date.now()) });
   wakePending = Date.now();
-  jcAdd('jc', 'PC chalu korar signal pathalam. 1-2 minute-er moddhe on hole janabo.');
-  setTimeout(() => { if (wakePending && Date.now() - wakePending > 85000) { wakePending = 0; jcAdd('jc', 'PC ekhono offline. BIOS Wake-on-LAN, LAN cable ar helper phone check koro.'); } }, 90000);
+  jcLocal('PC chalu korar signal pathalam. 1-2 minute-er moddhe on hole janabo.');
+  setTimeout(() => { if (wakePending && Date.now() - wakePending > 85000) { wakePending = 0; jcLocal('PC ekhono offline. BIOS Wake-on-LAN, LAN cable ar helper phone check koro.'); } }, 90000);
 }
 function jcReply(m) {
   if (m.id && !jcMine.has(m.id)) return; // another phone/tab asked: don't log or speak it here
