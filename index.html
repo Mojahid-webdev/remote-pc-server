@@ -48,7 +48,7 @@
         <canvas id="scr"></canvas>
         <i class="c tl"></i><i class="c tr"></i><i class="c bl"></i><i class="c br"></i>
         <div class="hud">
-          <span class="hchip" id="hZoom">ZOOM 2×</span>
+          <button class="hchip btn" id="hZoom" type="button">ZOOM CIRCLE</button>
           <span class="hchip" id="hFps">0 FPS</span>
         </div>
         <div id="scrEmpty" class="scr-empty">PC OFFLINE</div>
@@ -80,11 +80,9 @@
       </div>
       <div id="pad">
         <i class="c tl"></i><i class="c tr"></i><i class="c bl"></i><i class="c br"></i>
-        <button id="modeChip" class="mode-chip" type="button">REL</button>
         <div class="pad-hint">
           <b>TRACKPAD</b>
-          <span id="hintRel"><em>REL</em> slide = move cursor · tap = click</span>
-          <span id="hintAbs"><em>ABS</em> cursor jumps to where you touch</span>
+          <span>slide = move cursor · tap = click</span>
           <span>2-finger tap = right click · 2-finger drag = scroll · hold = drag</span>
         </div>
       </div>
@@ -120,12 +118,6 @@
       <input id="rScroll" type="range" min="0.3" max="2.5" step="0.1"></label>
     <label class="check"><input id="cNatural" type="checkbox"> Natural scrolling (content follows finger)</label>
     <label class="check"><input id="cTap" type="checkbox"> Tap to click</label>
-    <div class="field">Trackpad mode
-      <div class="seg">
-        <button type="button" id="mRel">RELATIVE</button>
-        <button type="button" id="mAbs">ABSOLUTE</button>
-      </div>
-    </div>
     <div class="field">Screen quality <small class="mut">(lower = less data, faster)</small>
       <div class="seg">
         <button type="button" data-q="0">SAVER</button>
@@ -134,14 +126,18 @@
       </div>
     </div>
     <label class="check"><input id="cLive" type="checkbox"> Show PC screen (live)</label>
-    <label class="check"><input id="cZoom" type="checkbox"> Zoom on cursor (phone view only)</label>
-    <div class="field">Zoom level
-      <div class="seg" id="zlSeg">
-        <button type="button" data-z="1">1.5×</button><button type="button" data-z="2">2×</button>
-        <button type="button" data-z="3">3×</button><button type="button" data-z="4">4×</button>
+    <label class="check"><input id="cLoupe" type="checkbox"> Zoom circle around the cursor (screen stays fixed)</label>
+    <div class="field">Zoom circle magnification
+      <div class="seg" id="lzSeg">
+        <button type="button" data-lz="2">2×</button><button type="button" data-lz="3">3×</button>
+        <button type="button" data-lz="4">4×</button><button type="button" data-lz="5">5×</button>
       </div>
     </div>
-    <label class="check"><input id="cAuto" type="checkbox"> Auto zoom-out while the cursor moves fast</label>
+    <div class="field">Zoom circle size
+      <div class="seg" id="lrSeg">
+        <button type="button" data-lr="48">SMALL</button><button type="button" data-lr="68">MEDIUM</button><button type="button" data-lr="90">LARGE</button>
+      </div>
+    </div>
     <div class="field">Theme
       <div class="seg"><button type="button" id="thDark">DARK</button><button type="button" id="thLight">LIGHT</button></div>
     </div>

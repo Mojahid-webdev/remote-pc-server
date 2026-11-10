@@ -9,7 +9,7 @@ const LS = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
 const cfg = Object.assign(
-  { sens: 1.4, scroll: 1.0, natural: true, tap: true, mode: 'rel', mac: '', zi: 2, zoomOn: true, auto: true, live: true, qual: 1, theme: 'dark', accent: '#c8ff3e' },
+  { sens: 1.4, scroll: 1.0, natural: true, tap: true, mode: 'rel', mac: '', loupe: true, lz: 3, lr: 68, live: true, qual: 1, theme: 'dark', accent: '#c8ff3e' },
   LS.get('cfg', {})
 );
 const saveCfg = () => LS.set('cfg', cfg);
@@ -105,7 +105,7 @@ function onMsg(m) {
       if (!was && state.agent && wakePending) { wakePending = 0; toast('PC is online ✓', 3500); buzz([30, 40, 30]); }
       break;
     }
-    case 'cur': if (!(reg && reg.sw / reg.rw > 1.05)) cur = { x: m.x, y: m.y }; break;
+    case 'cur': cur = { x: m.x, y: m.y }; break;
     case 'toast': toast(m.text); break;
     case 'clip': onClip(m.text); break;
     case 'wake_sent':
@@ -145,11 +145,18 @@ let decoding = false, latest = null, fpsCount = 0, wasViewing = false;
 function viewWanted() {
   return cfg.live && authed && state.agent && document.visibilityState === 'visible';
 }
+function loupeCrop() {
+  if (!cfg.loupe) return 0;
+  const r = cv.getBoundingClientRect();
+  const sw = (reg && reg.sw) || 1920, sh = (reg && reg.sh) || 1080;
+  const sc = Math.min(r.width / sw, r.height / sh) || 0.2;   // css px per screen px in the fixed picture
+  return Math.max(80, Math.min(600, Math.round((2 * cfg.lr) / (sc * cfg.lz))));
+}
 function sendView() {
   const want = viewWanted();
   if (want) {
     const q = QUAL[cfg.qual] || QUAL[1];
-    tx({ t: 'view', on: true, z: cfg.zoomOn ? ZL[cfg.zi] : 1, auto: cfg.zoomOn && cfg.auto, w: q.w, q: q.q, fps: q.fps, sid });
+    tx({ t: 'view', on: true, z: 1, auto: false, w: q.w, q: q.q, fps: q.fps, lc: loupeCrop(), sid });
   } else if (wasViewing) {
     tx({ t: 'view', on: false });
   }
@@ -159,7 +166,7 @@ setInterval(sendView, 2000);
 
 function clearScreen() {
   try { frame && frame.close && frame.close(); } catch {}
-  frame = null; reg = null; cur = null; disp = null; latest = null; dirty = true;
+  frame = null; reg = null; cur = null; disp = null; latest = null; loupeImg = null; dirty = true;
   updateEmpty();
 }
 function updateEmpty() {
@@ -176,6 +183,7 @@ function updateEmpty() {
 function onFrame(buf) {
   if (!(buf instanceof ArrayBuffer) || buf.byteLength < 24) return;
   const dv = new DataView(buf);
+  if (dv.getUint8(0) === 0x4c) return onLoupe(buf); // 'L' = zoom-circle crop
   if (dv.getUint8(0) !== 0x46) return; // 'F'
   const ver = dv.getUint8(1); // '1' = 18-byte header, '2' = 22-byte header with cursor at capture time
   if (ver !== 0x31 && ver !== 0x32) return;
@@ -191,6 +199,24 @@ function onFrame(buf) {
   };
   decode();
 }
+let loupeImg = null, loupeBusy = false, loupeLatest = null;
+function onLoupe(buf) {
+  const dv = new DataView(buf);
+  loupeLatest = { rx: dv.getUint16(6, true), ry: dv.getUint16(8, true), rw: dv.getUint16(10, true) || 1, rh: dv.getUint16(12, true) || 1, jpg: buf.slice(18) };
+  if (loupeBusy) return;
+  loupeBusy = true;
+  (async () => {
+    while (loupeLatest) {
+      const f = loupeLatest; loupeLatest = null;
+      try {
+        const bmp = await createImageBitmap(new Blob([f.jpg], { type: 'image/jpeg' }));
+        try { loupeImg && loupeImg.bmp.close && loupeImg.bmp.close(); } catch {}
+        loupeImg = { bmp, rx: f.rx, ry: f.ry, rw: f.rw, rh: f.rh }; dirty = true;
+      } catch {}
+    }
+    loupeBusy = false;
+  })();
+}
 async function decode() {
   if (decoding) return;
   decoding = true;
@@ -201,7 +227,6 @@ async function decode() {
       try { frame && frame.close && frame.close(); } catch {}
       frame = bmp; reg = f.reg; dirty = true;
       if (f.fcur && reg.sw / reg.rw > 1.05) { cur = f.fcur; disp = { x: f.fcur.x, y: f.fcur.y }; } // zoomed: cursor locked to the picture
-      $('#hZoom').textContent = 'ZOOM ' + (+(reg.sw / reg.rw).toFixed(1)) + '×';
       updateEmpty();
     } catch {}
   }
@@ -220,9 +245,8 @@ function drawCursor(c, px, py, u) {
   c.save();
   c.translate(px, py);
   c.beginPath();
-  const zoomed = reg && reg.sw / reg.rw > 1.05;
-  c.arc(0, 0, (zoomed ? 30 : 13) * u, 0, 6.2832);
-  c.strokeStyle = cfg.accent; c.lineWidth = (zoomed ? 1 : 2) * u; c.stroke();
+  c.arc(0, 0, 11 * u, 0, 6.2832);
+  c.strokeStyle = cfg.accent; c.lineWidth = 1.5 * u; c.stroke();
   c.beginPath();
   [[0, 0], [0, 17], [4.5, 13], [8, 21], [11, 19.5], [7.5, 12], [13, 12]].forEach(([x, y], i) => (i ? c.lineTo(x * s, y * s) : c.moveTo(x * s, y * s)));
   c.closePath();
@@ -241,7 +265,19 @@ function render() {
   cx2.drawImage(frame, ox, oy, dw, dh);
   if (disp) {
     const px = ox + ((disp.x - reg.rx) / reg.rw) * dw, py = oy + ((disp.y - reg.ry) / reg.rh) * dh;
-    drawCursor(cx2, Math.min(Math.max(px, ox + 2), ox + dw - 2), Math.min(Math.max(py, oy + 2), oy + dh - 2), u);
+    const qx = Math.min(Math.max(px, ox + 2), ox + dw - 2), qy = Math.min(Math.max(py, oy + 2), oy + dh - 2);
+    if (cfg.loupe && loupeImg) {
+      const R = cfg.lr * u, k = (dw / reg.sw) * cfg.lz;       // device px per screen px inside the circle
+      cx2.save();
+      cx2.beginPath(); cx2.arc(qx, qy, R, 0, 6.2832); cx2.clip();
+      cx2.fillStyle = '#000'; cx2.fill();
+      cx2.imageSmoothingQuality = 'high';
+      cx2.drawImage(loupeImg.bmp, qx + (loupeImg.rx - disp.x) * k, qy + (loupeImg.ry - disp.y) * k, loupeImg.rw * k, loupeImg.rh * k);
+      cx2.restore();
+      cx2.beginPath(); cx2.arc(qx, qy, R, 0, 6.2832);
+      cx2.strokeStyle = cfg.accent; cx2.lineWidth = 1 * u; cx2.stroke();
+    }
+    drawCursor(cx2, qx, qy, u);
   }
 }
 function loop() {
@@ -259,44 +295,33 @@ setInterval(() => { $('#hFps').textContent = fpsCount + ' FPS'; fpsCount = 0; },
 if (window.ResizeObserver) new ResizeObserver(sizeCanvas).observe($('#scrBox'));
 window.addEventListener('resize', sizeCanvas);
 
-/* zoom + view controls (all configured in settings) */
+/* zoom circle (the screen itself stays fixed) */
 function renderView() {
-  if (!reg) $('#hZoom').textContent = 'ZOOM ' + (cfg.zoomOn ? ZL[cfg.zi] : 1) + '×';
+  const h = $('#hZoom');
+  h.textContent = cfg.loupe ? 'ZOOM CIRCLE ' + cfg.lz + '×' : 'ZOOM CIRCLE OFF';
+  h.classList.toggle('on', cfg.loupe);
 }
-let lastZoomOn = true;
-$('#scrBox').addEventListener('dblclick', () => {
-  cfg.zoomOn = !cfg.zoomOn; saveCfg(); renderView(); sendView();
-  toast(cfg.zoomOn ? 'Zoom on cursor ON' : 'Zoom OFF (full screen)', 900);
-});
+function setLoupe(on) {
+  cfg.loupe = on; saveCfg(); if (!on) loupeImg = null; dirty = true; renderView(); sendView();
+  const c = $('#cLoupe'); if (c) c.checked = on;
+}
+$('#hZoom').addEventListener('click', () => setLoupe(!cfg.loupe));
 
 /* ================= trackpad ================= */
 const pad = $('#pad');
 const ptrs = new Map();
 let g = null;
 let selMode = false;
-let accX = 0, accY = 0, scX = 0, scY = 0, absP = null, raf = 0;
+let accX = 0, accY = 0, scX = 0, scY = 0, raf = 0;
 
 function flush() {
   raf = 0;
-  if (cfg.mode === 'abs') {
-    if (absP) { tx({ t: 'abs', x: +absP.x.toFixed(4), y: +absP.y.toFixed(4) }); absP = null; }
-  } else {
-    const x = Math.trunc(accX), y = Math.trunc(accY);
-    if (x || y) { tx({ t: 'm', x, y }); accX -= x; accY -= y; }
-  }
+  const x = Math.trunc(accX), y = Math.trunc(accY);
+  if (x || y) { tx({ t: 'm', x, y }); accX -= x; accY -= y; }
   const sx = Math.trunc(scX), sy = Math.trunc(scY);
   if (sx || sy) { tx({ t: 'sc', x: sx, y: sy }); scX -= sx; scY -= sy; }
 }
 const schedule = () => { if (!raf) raf = requestAnimationFrame(flush); };
-function queueAbs(e) {
-  const r = pad.getBoundingClientRect();
-  absP = {
-    x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
-    y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)),
-  };
-  schedule();
-}
-
 pad.addEventListener('pointerdown', (e) => {
   if (e.target.closest('.mode-chip')) return;
   e.preventDefault();
@@ -304,7 +329,6 @@ pad.addEventListener('pointerdown', (e) => {
   ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY });
   if (ptrs.size === 1) {
     g = { t0: performance.now(), moved: false, max: 1, drag: false, lp: 0 };
-    if (cfg.mode === 'abs') queueAbs(e);
     if (selMode) { g.drag = true; tx({ t: 'md', b: 'l' }); pad.classList.add('drag'); }
     else g.lp = setTimeout(() => {
       if (g && !g.moved && ptrs.size === 1) {
@@ -327,8 +351,7 @@ pad.addEventListener('pointermove', (e) => {
   p.x = e.clientX; p.y = e.clientY;
   if (!g.moved && Math.hypot(e.clientX - p.sx, e.clientY - p.sy) > 8) { g.moved = true; clearTimeout(g.lp); }
   if (ptrs.size === 1 && g.max === 1) {
-    if (cfg.mode === 'abs') queueAbs(e);
-    else {
+    {
       const sp = Math.hypot(dx, dy);
       const gain = cfg.sens * Math.min(1 + sp * 0.09, 3.4);
       accX += dx * gain; accY += dy * gain; schedule();
@@ -359,17 +382,6 @@ function endPtr(e) {
 pad.addEventListener('pointerup', endPtr);
 pad.addEventListener('pointercancel', endPtr);
 pad.addEventListener('lostpointercapture', endPtr);
-
-function renderMode() {
-  $('#modeChip').textContent = cfg.mode === 'abs' ? 'ABS' : 'REL';
-  $('#hintRel').classList.toggle('cur', cfg.mode !== 'abs'); $('#hintAbs').classList.toggle('cur', cfg.mode === 'abs');
-  $('#mRel').classList.toggle('on', cfg.mode !== 'abs');
-  $('#mAbs').classList.toggle('on', cfg.mode === 'abs');
-}
-$('#modeChip').addEventListener('click', () => {
-  cfg.mode = cfg.mode === 'abs' ? 'rel' : 'abs'; saveCfg(); renderMode();
-  toast(cfg.mode === 'abs' ? 'ABSOLUTE: cursor jumps to where you touch' : 'RELATIVE: touchpad style');
-});
 
 /* ================= quick actions ================= */
 function holdBtn(el, b) {
@@ -598,30 +610,31 @@ function renderQual() { $$('[data-q]').forEach((b) => b.classList.toggle('on', +
 function loadSettingsUI() {
   $('#rSens').value = cfg.sens; $('#oSens').textContent = cfg.sens.toFixed(1);
   $('#rScroll').value = cfg.scroll; $('#oScroll').textContent = cfg.scroll.toFixed(1);
-  $('#cNatural').checked = cfg.natural; $('#cTap').checked = cfg.tap; $('#cAuto').checked = cfg.auto;
-  $('#cLive').checked = cfg.live; $('#cZoom').checked = cfg.zoomOn; renderZl(); renderThemeUI();
-  $('#macInput').value = cfg.mac; renderMode(); renderQual(); renderAdapters();
+  $('#cNatural').checked = cfg.natural; $('#cTap').checked = cfg.tap;
+  $('#cLive').checked = cfg.live; $('#cLoupe').checked = cfg.loupe; renderLoupeUI(); renderThemeUI();
+  $('#macInput').value = cfg.mac; renderQual(); renderAdapters();
 }
 $('#rSens').addEventListener('input', (e) => { cfg.sens = +e.target.value; $('#oSens').textContent = cfg.sens.toFixed(1); saveCfg(); });
 $('#rScroll').addEventListener('input', (e) => { cfg.scroll = +e.target.value; $('#oScroll').textContent = cfg.scroll.toFixed(1); saveCfg(); });
 $('#cNatural').addEventListener('change', (e) => { cfg.natural = e.target.checked; saveCfg(); });
 $('#cTap').addEventListener('change', (e) => { cfg.tap = e.target.checked; saveCfg(); });
-function renderZl() { $$('[data-z]').forEach((b) => b.classList.toggle('on', +b.dataset.z === cfg.zi - 1)); }
+function renderLoupeUI() {
+  $$('[data-lz]').forEach((b) => b.classList.toggle('on', +b.dataset.lz === cfg.lz));
+  $$('[data-lr]').forEach((b) => b.classList.toggle('on', +b.dataset.lr === cfg.lr));
+}
 function renderThemeUI() {
   $('#thDark').classList.toggle('on', cfg.theme !== 'light'); $('#thLight').classList.toggle('on', cfg.theme === 'light');
   $$('.sw').forEach((b) => b.classList.toggle('on', b.dataset.c.toLowerCase() === cfg.accent.toLowerCase()));
   $('#cCustom').value = cfg.accent;
 }
 $('#cLive').addEventListener('change', (e) => { cfg.live = e.target.checked; saveCfg(); if (!cfg.live) clearScreen(); sendView(); updateEmpty(); });
-$('#cZoom').addEventListener('change', (e) => { cfg.zoomOn = e.target.checked; saveCfg(); renderView(); sendView(); });
-$$('[data-z]').forEach((b) => b.addEventListener('click', () => { cfg.zi = +b.dataset.z + 1; cfg.zoomOn = true; $('#cZoom').checked = true; saveCfg(); renderZl(); renderView(); sendView(); }));
+$('#cLoupe').addEventListener('change', (e) => setLoupe(e.target.checked));
+$$('[data-lz]').forEach((b) => b.addEventListener('click', () => { cfg.lz = +b.dataset.lz; saveCfg(); renderLoupeUI(); renderView(); sendView(); dirty = true; }));
+$$('[data-lr]').forEach((b) => b.addEventListener('click', () => { cfg.lr = +b.dataset.lr; saveCfg(); renderLoupeUI(); sendView(); dirty = true; }));
 $('#thDark').addEventListener('click', () => { cfg.theme = 'dark'; saveCfg(); applyTheme(); renderThemeUI(); });
 $('#thLight').addEventListener('click', () => { cfg.theme = 'light'; saveCfg(); applyTheme(); renderThemeUI(); });
 $$('.sw').forEach((b) => b.addEventListener('click', () => { cfg.accent = b.dataset.c; saveCfg(); applyTheme(); renderThemeUI(); }));
 $('#cCustom').addEventListener('input', (e) => { cfg.accent = e.target.value; saveCfg(); applyTheme(); renderThemeUI(); });
-$('#cAuto').addEventListener('change', (e) => { cfg.auto = e.target.checked; saveCfg(); renderView(); sendView(); });
-$('#mRel').addEventListener('click', () => { cfg.mode = 'rel'; saveCfg(); renderMode(); });
-$('#mAbs').addEventListener('click', () => { cfg.mode = 'abs'; saveCfg(); renderMode(); });
 $$('[data-q]').forEach((b) => b.addEventListener('click', () => { cfg.qual = +b.dataset.q; saveCfg(); renderQual(); sendView(); }));
 $('#bSave').addEventListener('click', () => {
   const raw = $('#macInput').value.trim();
@@ -676,7 +689,7 @@ document.addEventListener('visibilitychange', () => {
 });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
-applyTheme(); renderMode(); renderView(); buildKb(); renderStatus(); sizeCanvas(); keepAwake();
+applyTheme(); renderView(); buildKb(); renderStatus(); sizeCanvas(); keepAwake();
 requestAnimationFrame(loop);
 connect();
 })();
