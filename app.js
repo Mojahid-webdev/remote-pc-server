@@ -584,25 +584,36 @@ function jcSend(q) {
   tx({ t: 'jc', q, id: String(Date.now()) });
 }
 function jcReply(m) {
-  jcAdd('jc', m.say || (m.ok ? 'Hoye geche.' : 'Hoyni.'));
-  if (cfg.jcSpeak && 'speechSynthesis' in window && m.say) {
+  const say = m.say || (m.ok ? 'Hoye geche.' : 'Hoyni.');
+  jcAdd('jc', say);
+  const talk = !!cfg.jcTalk;
+  if ((cfg.jcSpeak || talk) && 'speechSynthesis' in window) {
     try {
       speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(m.say.split('\n')[0]);
-      u.lang = cfg.jcLang === 'en-US' ? 'en-US' : 'en-IN';
+      let sp = say.includes('\n') ? say.split('\n')[0] : say;
+      if (sp.length > 400) sp = sp.slice(0, 400);
+      const u = new SpeechSynthesisUtterance(sp);
+      u.lang = /[\u0980-\u09FF]/.test(sp) ? 'bn-BD' : (cfg.jcLang === 'en-US' ? 'en-US' : 'en-IN');
+      if (talk) { u.onend = jcTalkNext; u.onerror = jcTalkNext; }
       speechSynthesis.speak(u);
+      return;
     } catch {}
   }
+  if (talk) jcTalkNext();
+}
+function jcTalkNext() {
+  setTimeout(() => { if (cfg.jcTalk && !$('#sheetJC').hidden && !jcRec) $('#jcMic').click(); }, 450);
 }
 function jcRenderLang() { $('#jcLang').textContent = cfg.jcLang === 'en-US' ? 'EN' : 'BN'; }
 $('#btnJC').addEventListener('click', () => {
-  openSheet('JC'); jcRenderLang(); $('#jcSpeak').checked = !!cfg.jcSpeak;
+  openSheet('JC'); jcRenderLang(); $('#jcSpeak').checked = !!cfg.jcSpeak; $('#jcTalk').checked = !!cfg.jcTalk;
   if (!jcLog.children.length) jcAdd('jc', 'Ami JC. Likho ba mic chepe bolo. "help" likhle sob command dekhabo.');
 });
 $('#jcForm').addEventListener('submit', (e) => { e.preventDefault(); jcSend(jcIn.value); jcIn.value = ''; });
 $('#jcChips').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) jcSend(b.dataset.q); });
 $('#jcLang').addEventListener('click', () => { cfg.jcLang = cfg.jcLang === 'en-US' ? 'bn-BD' : 'en-US'; saveCfg(); jcRenderLang(); });
 $('#jcSpeak').addEventListener('change', (e) => { cfg.jcSpeak = e.target.checked; saveCfg(); });
+$('#jcTalk').addEventListener('change', (e) => { cfg.jcTalk = e.target.checked; saveCfg(); if (cfg.jcTalk && !jcRec) $('#jcMic').click(); });
 let jcRec = null;
 $('#jcMic').addEventListener('click', () => {
   if (!SR) return toast('Ei browser-e voice nei. Chrome use koro.', 3000);
@@ -620,7 +631,9 @@ $('#jcMic').addEventListener('click', () => {
 
 /* ================= sheets ================= */
 function openSheet(id) { $('#sheet' + id).hidden = false; }
-function closeSheets() { $$('.sheet').forEach((s) => { s.hidden = true; }); disarm(); }
+function closeSheets() {
+  if (typeof jcRec !== 'undefined' && jcRec) { try { jcRec.stop(); } catch {} }
+  try { speechSynthesis.cancel(); } catch {} $$('.sheet').forEach((s) => { s.hidden = true; }); disarm(); }
 $$('.sheet [data-close]').forEach((el) => el.addEventListener('click', closeSheets));
 $('#btnPower').addEventListener('click', () => openSheet('Power'));
 $('#btnSet').addEventListener('click', () => { loadSettingsUI(); openSheet('Set'); });
