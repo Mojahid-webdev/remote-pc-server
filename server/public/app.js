@@ -9,10 +9,11 @@ const LS = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
 const cfg = Object.assign(
-  { sens: 1.4, scroll: 1.0, natural: true, tap: true, mode: 'rel', mac: '', loupe: true, lz: 3, lr: 68, live: true, qual: 1, theme: 'dark', accent: '#c8ff3e' },
+  { sens: 2.4, scroll: 1.0, natural: true, tap: true, mode: 'rel', mac: '', loupe: true, lz: 3, lr: 68, live: true, qual: 1, theme: 'dark', accent: '#c8ff3e' },
   LS.get('cfg', {})
 );
 const saveCfg = () => LS.set('cfg', cfg);
+if (!cfg.m2) { cfg.sens = Math.max(cfg.sens, 2.4); cfg.lr = Math.max(cfg.lr, 90); cfg.m2 = true; saveCfg(); }
 let token = LS.get('token', '');
 
 const ZL = [1, 1.5, 2, 3, 4, 6];
@@ -243,17 +244,17 @@ function sizeCanvas() {
   dirty = true;
 }
 function drawCursor(c, px, py, u) {
-  const s = 1.35 * u;
+  const s = 0.8 * u;
   c.save();
   c.translate(px, py);
   c.beginPath();
-  c.arc(0, 0, 11 * u, 0, 6.2832);
-  c.strokeStyle = cfg.accent; c.lineWidth = 1.5 * u; c.stroke();
+  c.arc(0, 0, 6 * u, 0, 6.2832);
+  c.strokeStyle = cfg.accent; c.lineWidth = 1.2 * u; c.stroke();
   c.beginPath();
   [[0, 0], [0, 17], [4.5, 13], [8, 21], [11, 19.5], [7.5, 12], [13, 12]].forEach(([x, y], i) => (i ? c.lineTo(x * s, y * s) : c.moveTo(x * s, y * s)));
   c.closePath();
   c.fillStyle = '#fff'; c.fill();
-  c.lineWidth = 1.8 * u; c.strokeStyle = '#000'; c.lineJoin = 'round'; c.stroke();
+  c.lineWidth = 1.2 * u; c.strokeStyle = '#000'; c.lineJoin = 'round'; c.stroke();
   c.restore();
 }
 function render() {
@@ -355,7 +356,7 @@ pad.addEventListener('pointermove', (e) => {
   if (ptrs.size === 1 && g.max === 1) {
     {
       const sp = Math.hypot(dx, dy);
-      const gain = cfg.sens * Math.min(1 + sp * 0.09, 3.4);
+      const gain = cfg.sens * Math.min(1 + sp * 0.12, 4.5);
       accX += dx * gain; accY += dy * gain; schedule();
     }
   } else if (ptrs.size >= 2) {

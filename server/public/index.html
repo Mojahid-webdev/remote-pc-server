@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0a0c0b">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Remote PC</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="login" class="login" hidden>
+  <form id="loginForm" autocomplete="off">
+    <div class="brand big">REMOTE<b>/</b>PC</div>
+    <p id="loginMsg" class="mut">Paste your access token to pair this phone.</p>
+    <input id="tokenInput" type="password" placeholder="access token" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <button class="big-btn" type="submit">CONNECT</button>
+  </form>
+</div>
+
+<div id="app" hidden>
+  <header class="top">
+    <div class="brand">REMOTE<b>/</b>PC</div>
+    <div class="stats">
+      <span class="chip"><i id="pcDot" class="dot"></i><span id="pcLabel">PC OFFLINE</span></span>
+      <span class="chip" id="hlpLabel">0 HELPER</span>
+      <span class="chip" id="lat">RELAY --</span>
+    </div>
+    <button id="btnPower" class="icon-btn" aria-label="Power menu">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v9"/><path d="M6.3 6.8a8 8 0 1 0 11.4 0"/></svg>
+    </button>
+    <button id="btnSet" class="icon-btn" aria-label="Settings">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>
+    </button>
+  </header>
+
+  <main>
+    <!-- 1. PC screen -->
+    <section class="area-scr">
+      <div id="scrBox" class="scr-box">
+        <canvas id="scr"></canvas>
+        <i class="c tl"></i><i class="c tr"></i><i class="c bl"></i><i class="c br"></i>
+        <button class="jc-fab" id="btnJC" type="button" aria-label="JC assistant">JC</button>
+        <div class="hud">
+          <button class="hchip btn" id="hZoom" type="button">ZOOM CIRCLE</button>
+          <span class="hchip" id="hFps">0 FPS</span>
+        </div>
+        <div id="scrEmpty" class="scr-empty">PC OFFLINE</div>
+      </div>
+    </section>
+
+    <!-- 2. keyboard -->
+    <section class="area-kb" id="kbWrap">
+      <div class="tabs">
+        <button class="tab on" data-layer="abc" type="button">ABC</button>
+        <button class="tab" data-layer="num" type="button">123</button>
+        <button class="tab" data-layer="sp" type="button">SPECIAL</button>
+        <i class="grow"></i>
+        <button class="tab key" id="bPrt" type="button">PrtSc</button>
+        <button class="tab key" id="bNative" type="button"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg> PHONE</button>
+        <button class="tab key" id="bKbToggle" type="button" aria-label="Hide keyboard"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+      </div>
+      <div id="kb"></div>
+    </section>
+
+    <!-- 3. buttons + trackpad -->
+    <section class="area-ctl">
+      <button class="kbbar" id="kbShow" type="button" hidden><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg><span>SHOW KEYBOARD</span><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg></button>
+      <div class="pills">
+        <button class="pill" id="bCopy" type="button">COPY</button>
+        <button class="pill" id="bPaste" type="button">PASTE</button>
+        <button class="pill" id="bSel" type="button">SELECT</button>
+        <button class="pill" id="bAll" type="button">SELECT ALL</button>
+      </div>
+      <div id="pad">
+        <i class="c tl"></i><i class="c tr"></i><i class="c bl"></i><i class="c br"></i>
+        <div class="pad-hint">
+          <b>TRACKPAD</b>
+          <span>slide = move cursor · tap = click</span>
+          <span>2-finger tap = right click · 2-finger drag = scroll · hold = drag</span>
+        </div>
+      </div>
+      <div class="lr">
+        <button class="act mouse" id="bL" type="button">LEFT</button>
+        <button class="act mouse" id="bR" type="button">RIGHT</button>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="sheetPower" class="sheet" hidden>
+  <div class="sheet-bg" data-close></div>
+  <div class="sheet-box">
+    <h3>POWER</h3>
+    <button class="s-btn accent" data-wake>POWER ON <small>wake via helper</small></button>
+    <button class="s-btn danger" data-power="shutdown">SHUT DOWN</button>
+    <button class="s-btn danger" data-power="restart">RESTART</button>
+    <button class="s-btn" data-power="sleep">SLEEP</button>
+    <button class="s-btn" data-power="lock">LOCK</button>
+    <button class="s-btn" data-power="abort">CANCEL SHUTDOWN <small>within 5 sec</small></button>
+    <button class="s-btn ghost" data-close>CLOSE</button>
+  </div>
+</div>
+
+<div id="sheetSet" class="sheet" hidden>
+  <div class="sheet-bg" data-close></div>
+  <div class="sheet-box">
+    <h3>SETTINGS</h3>
+    <label class="field">Pointer speed <output id="oSens"></output>
+      <input id="rSens" type="range" min="0.5" max="6" step="0.1"></label>
+    <label class="field">Scroll speed <output id="oScroll"></output>
+      <input id="rScroll" type="range" min="0.3" max="2.5" step="0.1"></label>
+    <label class="check"><input id="cNatural" type="checkbox"> Natural scrolling (content follows finger)</label>
+    <label class="check"><input id="cTap" type="checkbox"> Tap to click</label>
+    <div class="field">Screen quality <small class="mut">(lower = less data, faster)</small>
+      <div class="seg">
+        <button type="button" data-q="0">SAVER</button>
+        <button type="button" data-q="1">BALANCED</button>
+        <button type="button" data-q="2">SHARP</button>
+      </div>
+    </div>
+    <label class="check"><input id="cLive" type="checkbox"> Show PC screen (live)</label>
+    <label class="check"><input id="cLoupe" type="checkbox"> Zoom circle around the cursor (screen stays fixed)</label>
+    <div class="field">Zoom circle magnification
+      <div class="seg" id="lzSeg">
+        <button type="button" data-lz="2">2×</button><button type="button" data-lz="3">3×</button>
+        <button type="button" data-lz="4">4×</button><button type="button" data-lz="5">5×</button><button type="button" data-lz="6">6×</button>
+      </div>
+    </div>
+    <div class="field">Zoom circle size
+      <div class="seg" id="lrSeg">
+        <button type="button" data-lr="48">SMALL</button><button type="button" data-lr="68">MEDIUM</button><button type="button" data-lr="90">LARGE</button><button type="button" data-lr="120">XL</button>
+      </div>
+    </div>
+    <div class="field">Theme
+      <div class="seg"><button type="button" id="thDark">DARK</button><button type="button" id="thLight">LIGHT</button></div>
+    </div>
+    <div class="field">Accent colour
+      <div class="swatches" id="swatches">
+        <button class="sw" type="button" data-c="#c8ff3e" style="background:#c8ff3e" aria-label="Volt green"></button>
+        <button class="sw" type="button" data-c="#35e0ff" style="background:#35e0ff" aria-label="Cyan"></button>
+        <button class="sw" type="button" data-c="#ff9a1f" style="background:#ff9a1f" aria-label="Orange"></button>
+        <button class="sw" type="button" data-c="#ff4fa3" style="background:#ff4fa3" aria-label="Pink"></button>
+        <button class="sw" type="button" data-c="#a78bff" style="background:#a78bff" aria-label="Violet"></button>
+        <button class="sw" type="button" data-c="#ffffff" style="background:#ffffff" aria-label="White"></button>
+        <input id="cCustom" type="color" value="#c8ff3e" aria-label="Custom colour">
+      </div>
+    </div>
+    <div class="field">PC MAC address (for Power On)
+      <input id="macInput" type="text" placeholder="AA:BB:CC:DD:EE:FF" autocapitalize="characters" spellcheck="false">
+      <div id="adapters" class="adapters"></div>
+    </div>
+    <button class="s-btn" id="bSave">SAVE</button>
+    <button class="s-btn ghost" id="bSignout">SIGN OUT / CHANGE TOKEN</button>
+  </div>
+</div>
+
+<div id="sheetJC" class="sheet" hidden>
+  <div class="sheet-bg" data-close></div>
+  <div class="sheet-box jc-box">
+    <h3>JC <small class="mut">assistant</small></h3>
+    <div id="jcLog" class="jc-log"></div>
+    <div class="jc-chips" id="jcChips">
+      <button type="button" data-q="chrome khulo">CHROME</button>
+      <button type="button" data-q="downloads kholo">DOWNLOADS</button>
+      <button type="button" data-q="volume barao">VOL +</button>
+      <button type="button" data-q="volume kamao">VOL −</button>
+      <button type="button" data-q="mute">MUTE</button>
+      <button type="button" data-q="pause">PLAY/PAUSE</button>
+      <button type="button" data-q="desktop">DESKTOP</button>
+      <button type="button" data-q="lock">LOCK</button>
+      <button type="button" data-q="help">HELP</button>
+    </div>
+    <form id="jcForm" class="jc-row" autocomplete="off">
+      <button type="button" id="jcLang" class="jc-lang" aria-label="Voice language">BN</button>
+      <input id="jcIn" type="text" placeholder="JC ke bolo… (chrome khulo)" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send">
+      <button type="button" id="jcMic" class="jc-mic" aria-label="Voice">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+      </button>
+      <button type="submit" class="jc-send" aria-label="Send">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </button>
+    </form>
+    <label class="check"><input id="jcSpeak" type="checkbox"> JC jore bole shonabe (phone speaker)</label>
+    <label class="field">Bangla voice <select id="jcVoiceBn"></select></label>
+    <label class="field">English voice <select id="jcVoiceEn"></select></label>
+    <label class="check"><input id="jcTalk" type="checkbox"> Talk mode: uttor shesh hole mic nije khulbe</label>
+  </div>
+</div>
+
+<div id="toast" role="status"></div>
+<textarea id="ghost" aria-hidden="true" tabindex="-1" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
+
+<script src="app.js"></script>
+</body>
+</html>
