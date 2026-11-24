@@ -118,42 +118,16 @@
       <input id="rSens" type="range" min="0.5" max="6" step="0.1"></label>
     <label class="field">Scroll speed <output id="oScroll"></output>
       <input id="rScroll" type="range" min="0.3" max="2.5" step="0.1"></label>
-    <label class="check"><input id="cNatural" type="checkbox"> Natural scrolling (content follows finger)</label>
-    <label class="check"><input id="cTap" type="checkbox"> Tap to click</label>
-    <div class="field">Screen quality <small class="mut">(lower = less data, faster)</small>
+    <label class="check"><input id="cNatural" type="checkbox"> Natural scroll</label>
+    <label class="check"><input id="cTap" type="checkbox"> Tap = click</label>
+    <div class="field">Screen quality <small class="mut">(lower = faster)</small>
       <div class="seg">
         <button type="button" data-q="0">SAVER</button>
         <button type="button" data-q="1">BALANCED</button>
         <button type="button" data-q="2">SHARP</button>
       </div>
     </div>
-    <label class="check"><input id="cLive" type="checkbox"> Show PC screen (live)</label>
-    <label class="check"><input id="cLoupe" type="checkbox"> Zoom circle around the cursor (screen stays fixed)</label>
-    <div class="field">Zoom circle magnification
-      <div class="seg" id="lzSeg">
-        <button type="button" data-lz="2">2×</button><button type="button" data-lz="3">3×</button>
-        <button type="button" data-lz="4">4×</button><button type="button" data-lz="5">5×</button><button type="button" data-lz="6">6×</button>
-      </div>
-    </div>
-    <div class="field">Zoom circle size
-      <div class="seg" id="lrSeg">
-        <button type="button" data-lr="48">SMALL</button><button type="button" data-lr="68">MEDIUM</button><button type="button" data-lr="90">LARGE</button><button type="button" data-lr="120">XL</button>
-      </div>
-    </div>
-    <div class="field">Theme
-      <div class="seg"><button type="button" id="thDark">DARK</button><button type="button" id="thLight">LIGHT</button></div>
-    </div>
-    <div class="field">Accent colour
-      <div class="swatches" id="swatches">
-        <button class="sw" type="button" data-c="#c8ff3e" style="background:#c8ff3e" aria-label="Volt green"></button>
-        <button class="sw" type="button" data-c="#35e0ff" style="background:#35e0ff" aria-label="Cyan"></button>
-        <button class="sw" type="button" data-c="#ff9a1f" style="background:#ff9a1f" aria-label="Orange"></button>
-        <button class="sw" type="button" data-c="#ff4fa3" style="background:#ff4fa3" aria-label="Pink"></button>
-        <button class="sw" type="button" data-c="#a78bff" style="background:#a78bff" aria-label="Violet"></button>
-        <button class="sw" type="button" data-c="#ffffff" style="background:#ffffff" aria-label="White"></button>
-        <input id="cCustom" type="color" value="#c8ff3e" aria-label="Custom colour">
-      </div>
-    </div>
+    <label class="check"><input id="cLive" type="checkbox"> Show PC screen</label>
     <div class="field">PC MAC address (for Power On)
       <input id="macInput" type="text" placeholder="AA:BB:CC:DD:EE:FF" autocapitalize="characters" spellcheck="false">
       <div id="adapters" class="adapters"></div>
@@ -210,10 +184,10 @@
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
       </button>
     </form>
-    <label class="check"><input id="jcSpeak" type="checkbox"> JC jore bole shonabe (phone speaker)</label>
+    <label class="check"><input id="jcSpeak" type="checkbox"> JC jore bole shonabe</label>
     <label class="field">Bangla voice <select id="jcVoiceBn"></select></label>
     <label class="field">English voice <select id="jcVoiceEn"></select></label>
-    <label class="check"><input id="jcTalk" type="checkbox"> Talk mode: uttor shesh hole mic nije khulbe</label>
+    <label class="check"><input id="jcTalk" type="checkbox"> Hands-free: mic chalu thakbe, "Hey JC" bolle jagbe, "thik ache" bolle ghumabe</label>
   </div>
 </div>
 

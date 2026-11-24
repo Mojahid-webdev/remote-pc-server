@@ -13,7 +13,8 @@ const cfg = Object.assign(
   LS.get('cfg', {})
 );
 const saveCfg = () => LS.set('cfg', cfg);
-if (!cfg.m3) { cfg.loupe = false; cfg.z = 1; cfg.m3 = true; saveCfg(); }
+if (!cfg.m4) { cfg.loupe = false; cfg.z = 1; cfg.m4 = true; saveCfg(); }
+cfg.loupe = false;
 if (!cfg.m2) { cfg.sens = Math.max(cfg.sens, 2.4); cfg.lr = Math.max(cfg.lr, 90); cfg.m2 = true; saveCfg(); }
 let token = LS.get('token', '');
 
@@ -298,7 +299,64 @@ function loop() {
 }
 setInterval(() => { $('#hFps').textContent = fpsCount + ' FPS'; fpsCount = 0; }, 1000);
 if (window.ResizeObserver) new ResizeObserver(sizeCanvas).observe($('#scrBox'));
+
 window.addEventListener('resize', sizeCanvas);
+
+/* ===== touch on the live screen: tap = click there, drag = move cursor, pinch = zoom ===== */
+(function screenTouch() {
+  const box = $('#scrBox');
+  if (!box) return;
+  // map a point in canvas CSS px to screen fraction (0..1) using the drawn picture rect
+  function toScreen(clientX, clientY) {
+    if (!reg) return null;
+    const r = cv.getBoundingClientRect();
+    const s = Math.min(r.width / frame.width, r.height / frame.height);
+    const dw = frame.width * s, dh = frame.height * s;
+    const ox = r.left + (r.width - dw) / 2, oy = r.top + (r.height - dh) / 2;
+    let fx = (clientX - ox) / dw, fy = (clientY - oy) / dh;        // 0..1 inside the picture
+    if (fx < 0 || fx > 1 || fy < 0 || fy > 1) return null;
+    const sx = (reg.rx + fx * reg.rw) / reg.sw;                    // 0..1 of the whole screen
+    const sy = (reg.ry + fy * reg.rh) / reg.sh;
+    return { x: Math.min(Math.max(sx, 0), 1), y: Math.min(Math.max(sy, 0), 1) };
+  }
+  const tp = new Map();
+  let moved = false, pinch0 = 0, z0 = 1, start = null, t0 = 0;
+  box.addEventListener('touchstart', (e) => {
+    if (!cfg.live || !state.agent || !frame) return;
+    for (const t of e.changedTouches) tp.set(t.identifier, { x: t.clientX, y: t.clientY });
+    if (tp.size === 1) {
+      const t = e.touches[0]; start = { x: t.clientX, y: t.clientY }; moved = false; t0 = performance.now();
+    } else if (tp.size === 2) {
+      const [a, b] = [...e.touches];
+      pinch0 = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY); z0 = cfg.z || 1; moved = true;
+    }
+    e.preventDefault();
+  }, { passive: false });
+  box.addEventListener('touchmove', (e) => {
+    if (!tp.size) return;
+    e.preventDefault();
+    if (e.touches.length >= 2 && pinch0) {
+      const [a, b] = [...e.touches];
+      const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+      const nz = Math.min(3, Math.max(1, Math.round(z0 * (d / pinch0))));
+      if (nz !== (cfg.z || 1)) { cfg.z = nz; saveCfg(); renderView(); sendView(); buzz(6); }
+      return;
+    }
+    const t = e.touches[0];
+    if (start && Math.hypot(t.clientX - start.x, t.clientY - start.y) > 10) moved = true;
+    if (moved) { const p = toScreen(t.clientX, t.clientY); if (p) tx({ t: 'abs', x: p.x, y: p.y }); }
+  }, { passive: false });
+  box.addEventListener('touchend', (e) => {
+    for (const t of e.changedTouches) tp.delete(t.identifier);
+    if (tp.size) return;
+    if (!moved && start && performance.now() - t0 < 350) {
+      const p = toScreen(start.x, start.y);
+      if (p) { tx({ t: 'abs', x: p.x, y: p.y }); setTimeout(() => tx({ t: 'c', b: 'l', n: 1 }), 30); buzz(8); }
+    }
+    start = null; pinch0 = 0;
+  });
+})();
+
 
 /* zoom circle (the screen itself stays fixed) */
 function renderView() {
@@ -616,7 +674,7 @@ function jcSend(q) {
     if (state.agent) return jcLocal('PC to ekhon-i chalu ache.');
     return jcWake();
   }
-  if (!state.agent) return jcLocal('PC ekhon offline, tai ami kaj korte parchhi na. PC chalu korte bolo: pc on koro.');
+  if (!state.agent) { const r = jcOffline(q); return jcLocal(r || 'PC ekhon off, tai PC-r kaj korte parchi na. Chalu korte bolo: "pc on koro". Tar age tomar sathe kotha bolte pari.'); }
   const id = String(Date.now());
   jcMine.add(id);
   tx({ t: 'jc', q, id });
@@ -646,12 +704,27 @@ function jcWake() {
   jcLocal('PC chalu korar signal pathalam. 1-2 minute-er moddhe on hole janabo.');
   setTimeout(() => { if (wakePending && Date.now() - wakePending > 85000) { wakePending = 0; jcLocal('PC ekhono offline. BIOS Wake-on-LAN, LAN cable ar helper phone check koro.'); } }, 90000);
 }
+/* light replies that work with the PC OFF (no agent, no AI needed) — wake word, greeting, time */
+function jcOffline(q) {
+  const t = q.toLowerCase().replace(/[!?,.।]/g, ' ').trim();
+  if (/\b(hey|hi|ok|okay|ওকে|হেই)?\s*(jc|জেসি|জিসি)\b/.test(t) && t.split(/\s+/).length <= 3)
+    return 'Ha bolo Mojahid, ami shunchi.';
+  if (/^(hi|hello|hey|salam|assalamu|হাই|হ্যালো|সালাম|কি খবর|ki khobor|kemon acho|kemon achis)/.test(t))
+    return 'Ha bolo Mojahid. PC ekhon off, chalu korte bolo "pc on koro".';
+  if (/(koyta baje|somoy|time|koy ta baje|সময়|কয়টা বাজে)/.test(t))
+    return 'Ekhon ' + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + ' baje.';
+  if (/(ke tumi|tumi ke|tomar naam|who are you|তুমি কে|তোমার নাম)/.test(t))
+    return 'Ami JC, tomar PC assistant. PC chalu thakle PC-r shob kaj korte pari.';
+  if (/(dhonnobad|thank|থ্যাঙ্ক|ধন্যবাদ)/.test(t)) return 'Welcome Mojahid.';
+  return '';
+}
+
 function jcReply(m) {
   if (m.id && !jcMine.has(m.id)) return; // another phone/tab asked: don't log or speak it here
   if (String(m.id || '').startsWith('ai')) { const o = $('#aiOut'); if (o) o.textContent = m.say || ''; toast(m.say || '', 4000); return; }
   const say = m.say || (m.ok ? 'Hoye geche.' : 'Hoyni.');
   jcAdd('jc', say);
-  const talk = !!cfg.jcTalk;
+  const talk = !!cfg.jcTalk; if (typeof hfSpeaking !== 'undefined') hfSpeaking = true;
   if ((cfg.jcSpeak || talk) && 'speechSynthesis' in window) {
     try {
       speechSynthesis.cancel();
@@ -663,13 +736,13 @@ function jcReply(m) {
       const v = jcPickVoice(isBn);
       if (v) { u.voice = v; u.lang = v.lang; }
       jcLastSpoken = say;
-      u.onend = () => { jcSpeakEnd = Date.now(); if (talk) jcTalkNext(); };
-      u.onerror = () => { jcSpeakEnd = Date.now(); if (talk) jcTalkNext(); };
+      u.onend = () => { jcSpeakEnd = Date.now(); setTimeout(() => { hfSpeaking = false; }, 300); };
+      u.onerror = () => { jcSpeakEnd = Date.now(); setTimeout(() => { hfSpeaking = false; }, 300); };
       speechSynthesis.speak(u);
       return;
     } catch {}
   }
-  if (talk) jcTalkNext();
+  if (!(cfg.jcSpeak || talk)) hfSpeaking = false;
 }
 function jcVoices() { try { return speechSynthesis.getVoices() || []; } catch { return []; } }
 function jcPickVoice(bn) {
@@ -691,39 +764,59 @@ function jcFillVoices() {
   fill($('#jcVoiceEn'), /^en/i, cfg.jcVoiceEn, 'jcVoiceEn');
 }
 try { speechSynthesis.addEventListener('voiceschanged', jcFillVoices); } catch {}
-function jcTalkNext() {
-  setTimeout(() => { if (cfg.jcTalk && !$('#sheetJC').hidden && !jcRec) $('#jcMic').click(); }, 1200);
-}
+function jcTalkNext() { /* legacy no-op: hands-free engine handles continuous listening */ }
 function jcRenderLang() { $('#jcLang').textContent = cfg.jcLang === 'en-US' ? 'EN' : 'BN'; }
 $('#btnJC').addEventListener('click', () => {
   openSheet('JC'); jcRenderLang(); jcFillVoices(); $('#jcSpeak').checked = !!cfg.jcSpeak; $('#jcTalk').checked = !!cfg.jcTalk;
-  if (!jcLog.children.length) jcAdd('jc', 'Ami JC. Likho ba mic chepe bolo. "help" likhle sob command dekhabo.');
+  if (!jcLog.children.length) jcAdd('jc', 'Ami JC. Mic chalu kore "Hey JC" bolo, tarpor hands-free kotha bolo. "thik ache" / "bas" bolle ghumiye jabo.');
+  if (cfg.jcTalk) handsFree(true);
 });
 $('#jcForm').addEventListener('submit', (e) => { e.preventDefault(); jcSend(jcIn.value); jcIn.value = ''; });
 $('#jcChips').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) jcSend(b.dataset.q); });
-$('#jcLang').addEventListener('click', () => { cfg.jcLang = cfg.jcLang === 'en-US' ? 'bn-BD' : 'en-US'; saveCfg(); jcRenderLang(); });
+$('#jcLang').addEventListener('click', () => { cfg.jcLang = cfg.jcLang === 'en-US' ? 'bn-BD' : 'en-US'; saveCfg(); jcRenderLang(); if (jcRec) { hfRestart = true; try { jcRec.stop(); } catch {} } });
 $('#jcSpeak').addEventListener('change', (e) => { cfg.jcSpeak = e.target.checked; saveCfg(); });
-$('#jcTalk').addEventListener('change', (e) => { cfg.jcTalk = e.target.checked; saveCfg(); if (cfg.jcTalk && !jcRec) $('#jcMic').click(); });
-let jcRec = null;
-$('#jcMic').addEventListener('click', () => {
-  if (!SR) return toast('Ei browser-e voice nei. Chrome use koro.', 3000);
-  if (jcRec) { try { jcRec.stop(); } catch {} return; }
-  try { speechSynthesis.cancel(); } catch {}
+
+/* ===== hands-free voice: mic stays on; "Hey JC" wakes, "thik ache / bas / ok" sleeps ===== */
+let jcRec = null, hfOn = false, hfAwake = false, hfRestart = false, hfSpeaking = false;
+const WAKE = /\b(hey\s*)?(jc|jesi|jeshi|jisi|জেসি|জিসি|হেই\s*জেসি)\b/i;
+const SLEEP = /\b(thik ache|thik achee|bas|basta|sob ok|ok thanks|thank you|ghumao|stop|chup|ঠিক আছে|বাস|ঘুমাও|চুপ)\b/i;
+
+function hfSetDot() { const b = $('#jcMic'); if (b) { b.classList.toggle('on', hfOn); b.classList.toggle('awake', hfAwake); } }
+function handsFree(on) {
+  cfg.jcTalk = on; saveCfg(); $('#jcTalk').checked = on;
+  if (on) { hfOn = true; hfAwake = false; startRec(); jcAdd('jc', 'Mic chalu. "Hey JC" bolo.'); }
+  else { hfOn = false; hfAwake = false; if (jcRec) { try { jcRec.stop(); } catch {} } }
+  hfSetDot();
+}
+function startRec() {
+  if (!SR) { toast('Ei browser-e voice nei. Chrome use koro.', 3000); handsFree(false); return; }
+  if (jcRec) return;
   const r = new SR();
   r.lang = cfg.jcLang === 'en-US' ? 'en-US' : 'bn-BD';
-  r.interimResults = false; r.maxAlternatives = 1;
-  $('#jcMic').classList.add('on');
-  r.onresult = (ev) => { const t = ev.results[0][0].transcript; if (jcIsEcho(t)) { toast('Nijer awaj dhorechhe, ignore korlam', 1800); return; } jcSend(t); };
-  r.onerror = (ev) => toast('Mic: ' + (ev.error === 'not-allowed' ? 'permission dao' : ev.error), 3000);
-  r.onend = () => { jcRec = null; $('#jcMic').classList.remove('on'); };
-  jcRec = r;
-  try { r.start(); } catch { jcRec = null; $('#jcMic').classList.remove('on'); }
-});
+  r.continuous = true; r.interimResults = false; r.maxAlternatives = 1;
+  r.onresult = (ev) => {
+    for (let i = ev.resultIndex; i < ev.results.length; i++) {
+      if (!ev.results[i].isFinal) continue;
+      const t = (ev.results[i][0].transcript || '').trim();
+      if (!t || hfSpeaking || jcIsEcho(t)) continue;
+      if (!hfAwake) { if (WAKE.test(t)) { hfAwake = true; hfSetDot(); jcLocal('Ha bolo Mojahid.'); } continue; }
+      if (SLEEP.test(t)) { hfAwake = false; hfSetDot(); jcLocal('Thik ache, ghumachhi. Dorkar hole "Hey JC" bolo.'); continue; }
+      const q = t.replace(WAKE, '').trim() || t;
+      jcSend(q);
+    }
+  };
+  r.onerror = (ev) => { if (ev.error === 'not-allowed') { toast('Mic permission dao', 3000); handsFree(false); } };
+  r.onend = () => { jcRec = null; if (hfOn) setTimeout(startRec, 250); else hfSetDot(); };
+  jcRec = r; hfSetDot();
+  try { r.start(); } catch { jcRec = null; }
+}
+$('#jcTalk').addEventListener('change', (e) => handsFree(e.target.checked));
+$('#jcMic').addEventListener('click', () => handsFree(!hfOn));
 
 /* ================= sheets ================= */
 function openSheet(id) { $('#sheet' + id).hidden = false; }
 function closeSheets() {
-  if (typeof jcRec !== 'undefined' && jcRec) { try { jcRec.stop(); } catch {} }
+  hfOn = false; hfAwake = false; if (typeof jcRec !== 'undefined' && jcRec) { try { jcRec.stop(); } catch {} }
   try { speechSynthesis.cancel(); } catch {} $$('.sheet').forEach((s) => { s.hidden = true; }); disarm(); }
 $$('.sheet [data-close]').forEach((el) => el.addEventListener('click', closeSheets));
 $('#btnPower').addEventListener('click', () => openSheet('Power'));
@@ -767,30 +860,14 @@ function loadSettingsUI() {
   $('#rSens').value = cfg.sens; $('#oSens').textContent = cfg.sens.toFixed(1);
   $('#rScroll').value = cfg.scroll; $('#oScroll').textContent = cfg.scroll.toFixed(1);
   $('#cNatural').checked = cfg.natural; $('#cTap').checked = cfg.tap;
-  $('#cLive').checked = cfg.live; $('#cLoupe').checked = cfg.loupe; renderLoupeUI(); renderThemeUI();
+  $('#cLive').checked = cfg.live;
   $('#macInput').value = cfg.mac; renderQual(); renderAdapters();
 }
 $('#rSens').addEventListener('input', (e) => { cfg.sens = +e.target.value; $('#oSens').textContent = cfg.sens.toFixed(1); saveCfg(); });
 $('#rScroll').addEventListener('input', (e) => { cfg.scroll = +e.target.value; $('#oScroll').textContent = cfg.scroll.toFixed(1); saveCfg(); });
 $('#cNatural').addEventListener('change', (e) => { cfg.natural = e.target.checked; saveCfg(); });
 $('#cTap').addEventListener('change', (e) => { cfg.tap = e.target.checked; saveCfg(); });
-function renderLoupeUI() {
-  $$('[data-lz]').forEach((b) => b.classList.toggle('on', +b.dataset.lz === cfg.lz));
-  $$('[data-lr]').forEach((b) => b.classList.toggle('on', +b.dataset.lr === cfg.lr));
-}
-function renderThemeUI() {
-  $('#thDark').classList.toggle('on', cfg.theme !== 'light'); $('#thLight').classList.toggle('on', cfg.theme === 'light');
-  $$('.sw').forEach((b) => b.classList.toggle('on', b.dataset.c.toLowerCase() === cfg.accent.toLowerCase()));
-  $('#cCustom').value = cfg.accent;
-}
 $('#cLive').addEventListener('change', (e) => { cfg.live = e.target.checked; saveCfg(); if (!cfg.live) clearScreen(); sendView(); updateEmpty(); });
-$('#cLoupe').addEventListener('change', (e) => setLoupe(e.target.checked));
-$$('[data-lz]').forEach((b) => b.addEventListener('click', () => { cfg.lz = +b.dataset.lz; saveCfg(); renderLoupeUI(); renderView(); sendView(); dirty = true; }));
-$$('[data-lr]').forEach((b) => b.addEventListener('click', () => { cfg.lr = +b.dataset.lr; saveCfg(); renderLoupeUI(); sendView(); dirty = true; }));
-$('#thDark').addEventListener('click', () => { cfg.theme = 'dark'; saveCfg(); applyTheme(); renderThemeUI(); });
-$('#thLight').addEventListener('click', () => { cfg.theme = 'light'; saveCfg(); applyTheme(); renderThemeUI(); });
-$$('.sw').forEach((b) => b.addEventListener('click', () => { cfg.accent = b.dataset.c; saveCfg(); applyTheme(); renderThemeUI(); }));
-$('#cCustom').addEventListener('input', (e) => { cfg.accent = e.target.value; saveCfg(); applyTheme(); renderThemeUI(); });
 $$('[data-q]').forEach((b) => b.addEventListener('click', () => { cfg.qual = +b.dataset.q; saveCfg(); renderQual(); sendView(); }));
 $('#bSave').addEventListener('click', () => {
   const raw = $('#macInput').value.trim();

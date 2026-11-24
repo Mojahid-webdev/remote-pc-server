@@ -129,10 +129,13 @@ setInterval(() => {
 function sendJSON(ws, obj) {
   if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
 }
+function agentLive() {
+  return !!(agent && agent.readyState === 1 && agent.isAlive !== false);
+}
 function presence() {
   return {
     t: 'presence',
-    agent: !!agent,
+    agent: agentLive(),
     agentName: agent ? agent.meta.name : null,
     info: agentInfo,
     helpers: [...helpers].map((h) => h.meta.name),
@@ -323,15 +326,18 @@ wss.on('connection', (ws, req) => {
   ws.on('error', () => {});
 });
 
-// heartbeat: drop dead sockets, keep NAT / proxy connections alive
+// heartbeat: a dead PC must show as OFF fast, so ping often and drop the agent the moment it misses one
 setInterval(() => {
   wss.clients.forEach((ws) => {
-    if (!ws.isAlive) return ws.terminate();
+    if (!ws.isAlive) {
+      const wasAgent = ws === agent;
+      try { ws.terminate(); } catch {}
+      if (wasAgent) { agent = null; agentInfo = null; broadcastPresence(); }
+      return;
+    }
     ws.isAlive = false;
-    try {
-      ws.ping();
-    } catch {}
+    try { ws.ping(); } catch {}
   });
-}, 25000).unref();
+}, 8000).unref();
 
 server.listen(PORT, '0.0.0.0', () => console.log(`relay listening on :${PORT}`));
