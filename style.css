@@ -225,3 +225,5 @@ main.nokb .area-kb{display:none}
 
 .ai-in{width:100%;height:42px;margin-top:6px;padding:0 10px;background:var(--bg);color:var(--fg,#e8ece4);border:1px solid var(--line,#2a2f2a);border-radius:10px;font:500 14px var(--mono,monospace)}
 #aiOut{margin-top:6px;font-size:12px;line-height:1.4}
+
+.jc-hidechat{float:right;font:600 10px var(--sans);letter-spacing:.05em;color:var(--mut);background:transparent;border:1px solid var(--line);border-radius:7px;padding:3px 8px}

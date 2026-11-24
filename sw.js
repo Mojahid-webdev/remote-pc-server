@@ -1,6 +1,6 @@
 'use strict';
 // network-first service worker: keeps the app installable and loadable offline-ish
-const CACHE = "rpc-v15";
+const CACHE = "rpc-v16";
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest', 'icon.svg'];
 
 self.addEventListener('install', (e) => {

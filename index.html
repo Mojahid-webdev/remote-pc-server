@@ -120,7 +120,7 @@
       <input id="rScroll" type="range" min="0.3" max="2.5" step="0.1"></label>
     <label class="check"><input id="cNatural" type="checkbox"> Natural scroll</label>
     <label class="check"><input id="cTap" type="checkbox"> Tap = click</label>
-    <div class="field">Screen quality <small class="mut">(lower = faster)</small>
+    <div class="field">Screen quality
       <div class="seg">
         <button type="button" data-q="0">SAVER</button>
         <button type="button" data-q="1">BALANCED</button>
@@ -128,30 +128,10 @@
       </div>
     </div>
     <label class="check"><input id="cLive" type="checkbox"> Show PC screen</label>
-    <div class="field">PC MAC address (for Power On)
-      <input id="macInput" type="text" placeholder="AA:BB:CC:DD:EE:FF" autocapitalize="characters" spellcheck="false">
-      <div id="adapters" class="adapters"></div>
-    </div>
-    <div class="field">JC AI connectors <small class="mut">(key shudhu PC-te save hoy)</small>
-      <select id="aiProv" class="ai-in">
-        <option value="groq">Groq (free)</option>
-        <option value="cerebras">Cerebras (free)</option>
-        <option value="openrouter">OpenRouter (free models)</option>
-        <option value="mistral">Mistral (free tier)</option>
-        <option value="gemini">Google Gemini</option>
-        <option value="deepseek">DeepSeek (paid, cheap)</option>
-        <option value="openai">OpenAI ChatGPT (paid)</option>
-        <option value="anthropic">Anthropic Claude (paid)</option>
-      </select>
-      <input id="aiKey" class="ai-in" type="password" placeholder="API key paste koro (khali = muche dao)" autocomplete="off" spellcheck="false">
-      <input id="aiModel" class="ai-in" type="text" placeholder="Model (optional)" autocomplete="off" spellcheck="false">
-      <button class="s-btn accent" type="button" id="bAiSave">SAVE + TEST KEY</button>
-      <button class="s-btn" type="button" id="bAiMain">EI AI KE MAIN KORO</button>
-      <div id="aiOut" class="mut"></div>
-    </div>
-    <div class="field">Helper phone (Power On)
-      <a class="s-btn" href="https://github.com/Mojahid-webdev/remote-pc-server/releases/download/helper-latest/jc-helper.apk">1. DOWNLOAD HELPER APP <small>install on the spare phone</small></a>
-      <button class="s-btn accent" type="button" id="bHelperLink">2. CONNECT HELPER APP <small>on that phone</small></button>
+    <label class="check"><input id="cHandZoom" type="checkbox"> Screen hand zoom (pinch + drag)</label>
+    <div class="field">Helper phone
+      <a class="s-btn" href="https://github.com/Mojahid-webdev/remote-pc-server/releases/download/helper-latest/jc-helper.apk">DOWNLOAD HELPER APP</a>
+      <button class="s-btn accent" type="button" id="bHelperLink">CONNECT HELPER APP</button>
     </div>
     <button class="s-btn" id="bSave">SAVE</button>
     <button class="s-btn ghost" id="bSignout">SIGN OUT / CHANGE TOKEN</button>
@@ -161,7 +141,7 @@
 <div id="sheetJC" class="sheet" hidden>
   <div class="sheet-bg" data-close></div>
   <div class="sheet-box jc-box">
-    <h3>JC <small class="mut">assistant</small></h3>
+    <h3>JC <small class="mut">assistant</small> <button type="button" id="jcHideChat" class="jc-hidechat">chat hide</button></h3>
     <div id="jcLog" class="jc-log"></div>
     <div class="jc-chips" id="jcChips">
       <button type="button" data-q="chrome khulo">CHROME</button>

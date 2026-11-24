@@ -9,7 +9,7 @@ const LS = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
 const cfg = Object.assign(
-  { sens: 2.4, scroll: 1.0, natural: true, tap: true, mode: 'rel', mac: '', loupe: true, lz: 3, lr: 68, live: true, qual: 1, theme: 'dark', accent: '#c8ff3e' },
+  { sens: 2.4, scroll: 1.0, natural: true, tap: true, mode: 'rel', mac: '', loupe: false, lz: 3, lr: 68, live: true, qual: 1, handZoom: true, theme: 'dark', accent: '#c8ff3e' },
   LS.get('cfg', {})
 );
 const saveCfg = () => LS.set('cfg', cfg);
@@ -145,6 +145,7 @@ function renderStatus() {
 const cv = $('#scr');
 const cx2 = cv.getContext ? cv.getContext('2d') : null;
 let frame = null, reg = null, cur = null, disp = null, dirty = true;
+let vz = 1, vpx = 0, vpy = 0; // client zoom + pan (light, no extra data)
 let decoding = false, latest = null, fpsCount = 0, wasViewing = false;
 
 function viewWanted() {
@@ -162,7 +163,7 @@ function sendView() {
   if (want) {
     const q = QUAL[cfg.qual] || QUAL[1];
     const mv = !!(document.fullscreenElement || document.webkitFullscreenElement);
-    tx({ t: 'view', on: true, z: cfg.z || 1, auto: false, w: mv ? Math.max(q.w, 1280) : q.w, q: mv ? Math.max(q.q, 62) : q.q, fps: mv ? 20 : q.fps, lc: loupeCrop(), sid });
+    tx({ t: 'view', on: true, z: 1, auto: false, w: mv ? Math.max(q.w, 1280) : q.w, q: mv ? Math.max(q.q, 62) : q.q, fps: mv ? 20 : q.fps, lc: loupeCrop(), sid });
   } else if (wasViewing) {
     tx({ t: 'view', on: false });
   }
@@ -267,6 +268,9 @@ function render() {
   if (!frame || !reg) return;
   const s = Math.min(W / frame.width, H / frame.height);
   const dw = frame.width * s, dh = frame.height * s, ox = (W - dw) / 2, oy = (H - dh) / 2;
+  clampPan(W, H, dw, dh, ox, oy);
+  cx2.save();
+  cx2.translate(vpx, vpy); cx2.scale(vz, vz);
   cx2.imageSmoothingQuality = 'high';
   cx2.drawImage(frame, ox, oy, dw, dh);
   if (disp) {
@@ -285,17 +289,22 @@ function render() {
     }
     drawCursor(cx2, qx, qy, u);
   }
+  cx2.restore();
+}
+function clampPan(W, H, dw, dh, ox, oy) {
+  if (vz <= 1.001) { vz = 1; vpx = 0; vpy = 0; return; }
+  // keep the scaled picture covering the viewport (no black gaps)
+  const minX = W - (ox + dw) * vz, maxX = -ox * vz;
+  const minY = H - (oy + dh) * vz, maxY = -oy * vz;
+  vpx = Math.min(maxX, Math.max(minX, vpx));
+  vpy = Math.min(maxY, Math.max(minY, vpy));
 }
 function loop() {
   requestAnimationFrame(loop);
-  if (cur) {
-    if (!disp) { disp = { x: cur.x, y: cur.y }; dirty = true; }
-    const dx = cur.x - disp.x, dy = cur.y - disp.y;
-    if (Math.abs(dx) > 0.25 || Math.abs(dy) > 0.25) { disp.x += dx * 0.65; disp.y += dy * 0.65; dirty = true; }
-  }
+  if (cur && (!disp || disp.x !== cur.x || disp.y !== cur.y)) { disp = { x: cur.x, y: cur.y }; dirty = true; }
   if (!dirty) return;
   dirty = false;
-  render();
+  render(); renderView();
 }
 setInterval(() => { $('#hFps').textContent = fpsCount + ' FPS'; fpsCount = 0; }, 1000);
 if (window.ResizeObserver) new ResizeObserver(sizeCanvas).observe($('#scrBox'));
@@ -306,63 +315,92 @@ window.addEventListener('resize', sizeCanvas);
 (function screenTouch() {
   const box = $('#scrBox');
   if (!box) return;
-  // map a point in canvas CSS px to screen fraction (0..1) using the drawn picture rect
+  // undo the client zoom/pan: canvas CSS px -> screen fraction (0..1)
   function toScreen(clientX, clientY) {
-    if (!reg) return null;
+    if (!reg || !frame) return null;
     const r = cv.getBoundingClientRect();
-    const s = Math.min(r.width / frame.width, r.height / frame.height);
+    const u = cv.width / Math.max(1, r.width);                 // device px per CSS px
+    let X = (clientX - r.left) * u, Y = (clientY - r.top) * u;  // device px
+    X = (X - vpx) / vz; Y = (Y - vpy) / vz;                     // undo zoom+pan
+    const s = Math.min(cv.width / frame.width, cv.height / frame.height);
     const dw = frame.width * s, dh = frame.height * s;
-    const ox = r.left + (r.width - dw) / 2, oy = r.top + (r.height - dh) / 2;
-    let fx = (clientX - ox) / dw, fy = (clientY - oy) / dh;        // 0..1 inside the picture
+    const ox = (cv.width - dw) / 2, oy = (cv.height - dh) / 2;
+    const fx = (X - ox) / dw, fy = (Y - oy) / dh;
     if (fx < 0 || fx > 1 || fy < 0 || fy > 1) return null;
-    const sx = (reg.rx + fx * reg.rw) / reg.sw;                    // 0..1 of the whole screen
-    const sy = (reg.ry + fy * reg.rh) / reg.sh;
+    const sx = (reg.rx + fx * reg.rw) / reg.sw, sy = (reg.ry + fy * reg.rh) / reg.sh;
     return { x: Math.min(Math.max(sx, 0), 1), y: Math.min(Math.max(sy, 0), 1) };
   }
   const tp = new Map();
-  let moved = false, pinch0 = 0, z0 = 1, start = null, t0 = 0;
+  let start = null, t0 = 0, moved = false;
+  let pinch0 = 0, vz0 = 1, mid0 = null;
+  const handZoom = () => cfg.handZoom !== false;
   box.addEventListener('touchstart', (e) => {
     if (!cfg.live || !state.agent || !frame) return;
     for (const t of e.changedTouches) tp.set(t.identifier, { x: t.clientX, y: t.clientY });
-    if (tp.size === 1) {
-      const t = e.touches[0]; start = { x: t.clientX, y: t.clientY }; moved = false; t0 = performance.now();
-    } else if (tp.size === 2) {
+    if (tp.size === 1) { const t = e.touches[0]; start = { x: t.clientX, y: t.clientY, px: t.clientX, py: t.clientY }; moved = false; t0 = performance.now(); }
+    else if (tp.size === 2 && handZoom()) {
       const [a, b] = [...e.touches];
-      pinch0 = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY); z0 = cfg.z || 1; moved = true;
+      pinch0 = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY); vz0 = vz;
+      mid0 = { x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 }; moved = true;
     }
     e.preventDefault();
   }, { passive: false });
   box.addEventListener('touchmove', (e) => {
     if (!tp.size) return;
     e.preventDefault();
-    if (e.touches.length >= 2 && pinch0) {
+    const r = cv.getBoundingClientRect(), u = cv.width / Math.max(1, r.width);
+    if (e.touches.length >= 2 && pinch0 && handZoom()) {
       const [a, b] = [...e.touches];
       const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
-      const nz = Math.min(3, Math.max(1, Math.round(z0 * (d / pinch0))));
-      if (nz !== (cfg.z || 1)) { cfg.z = nz; saveCfg(); renderView(); sendView(); buzz(6); }
+      const mid = { x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 };
+      const nz = Math.min(4, Math.max(1, vz0 * (d / pinch0)));
+      // zoom around the pinch midpoint, and pan with the fingers
+      const mx = (mid0.x - r.left) * u, my = (mid0.y - r.top) * u;
+      vpx = mx - ((mx - vpx) / vz) * nz + (mid.x - mid0.x) * u;
+      vpy = my - ((my - vpy) / vz) * nz + (mid.y - mid0.y) * u;
+      vz = nz; mid0 = mid; dirty = true;
       return;
     }
     const t = e.touches[0];
-    if (start && Math.hypot(t.clientX - start.x, t.clientY - start.y) > 10) moved = true;
-    if (moved) { const p = toScreen(t.clientX, t.clientY); if (p) tx({ t: 'abs', x: p.x, y: p.y }); }
+    if (!start) return;
+    if (Math.hypot(t.clientX - start.x, t.clientY - start.y) > 8) moved = true;
+    if (!moved) return;
+    if (vz > 1.01) {
+      // zoomed: one finger pans the picture
+      vpx += (t.clientX - start.px) * u; vpy += (t.clientY - start.py) * u; dirty = true;
+      start.px = t.clientX; start.py = t.clientY;
+    } else {
+      // not zoomed: one finger drags the cursor
+      const p = toScreen(t.clientX, t.clientY); if (p) tx({ t: 'abs', x: p.x, y: p.y });
+    }
   }, { passive: false });
-  box.addEventListener('touchend', (e) => {
+  function up(e) {
     for (const t of e.changedTouches) tp.delete(t.identifier);
     if (tp.size) return;
     if (!moved && start && performance.now() - t0 < 350) {
       const p = toScreen(start.x, start.y);
-      if (p) { tx({ t: 'abs', x: p.x, y: p.y }); setTimeout(() => tx({ t: 'c', b: 'l', n: 1 }), 30); buzz(8); }
+      if (p) { tx({ t: 'abs', x: p.x, y: p.y }); setTimeout(() => tx({ t: 'c', b: 'l', n: 1 }), 25); buzz(8); }
     }
-    start = null; pinch0 = 0;
+    start = null; pinch0 = 0; mid0 = null;
+  }
+  box.addEventListener('touchend', up);
+  box.addEventListener('touchcancel', up);
+  // double-tap to reset zoom
+  let lastTap = 0;
+  box.addEventListener('touchend', () => {
+    const now = performance.now();
+    if (now - lastTap < 300 && vz > 1.01) { vz = 1; vpx = vpy = 0; dirty = true; buzz(10); }
+    lastTap = now;
   });
 })();
 
 
-/* zoom circle (the screen itself stays fixed) */
+/* screen zoom (client-side, light) */
 function renderView() {
   const h = $('#hZoom');
-  h.textContent = 'ZOOM ' + (cfg.z || 1) + '×';
-  h.classList.toggle('on', (cfg.z || 1) > 1);
+  const z = Math.round(vz * 10) / 10;
+  h.textContent = 'ZOOM ' + (z > 1 ? z : 1) + '×';
+  h.classList.toggle('on', vz > 1.01);
 }
 function setLoupe(on) {
   cfg.loupe = on; saveCfg(); if (!on) loupeImg = null; dirty = true; renderView(); sendView();
@@ -371,8 +409,14 @@ function setLoupe(on) {
 /* button zoom: 1x -> 2x -> 3x -> 1x (the picture zooms around the cursor; no circle following the mouse) */
 $('#hZoom').addEventListener('click', () => {
   const Z = [1, 2, 3];
-  cfg.z = Z[(Z.indexOf(cfg.z || 1) + 1) % Z.length];
-  saveCfg(); renderView(); sendView(); buzz(10);
+  const cur = Math.max(1, Math.round(vz));
+  const nz = Z[(Z.indexOf(cur) + 1) % Z.length];
+  // zoom around the centre of the canvas
+  const cxp = cv.width / 2, cyp = cv.height / 2;
+  vpx = cxp - ((cxp - vpx) / vz) * nz;
+  vpy = cyp - ((cyp - vpy) / vz) * nz;
+  vz = nz; if (vz <= 1.01) { vz = 1; vpx = vpy = 0; }
+  dirty = true; renderView(); buzz(10);
 });
 /* movie mode: full screen, landscape, smoother picture */
 $('#hFull').addEventListener('click', async () => {
@@ -724,6 +768,7 @@ function jcReply(m) {
   if (String(m.id || '').startsWith('ai')) { const o = $('#aiOut'); if (o) o.textContent = m.say || ''; toast(m.say || '', 4000); return; }
   const say = m.say || (m.ok ? 'Hoye geche.' : 'Hoyni.');
   jcAdd('jc', say);
+  if (typeof hfAwake !== 'undefined' && hfOn && hfAwake) hfIdle = Date.now();
   const talk = !!cfg.jcTalk; if (typeof hfSpeaking !== 'undefined') hfSpeaking = true;
   if ((cfg.jcSpeak || talk) && 'speechSynthesis' in window) {
     try {
@@ -769,6 +814,7 @@ function jcRenderLang() { $('#jcLang').textContent = cfg.jcLang === 'en-US' ? 'E
 $('#btnJC').addEventListener('click', () => {
   openSheet('JC'); jcRenderLang(); jcFillVoices(); $('#jcSpeak').checked = !!cfg.jcSpeak; $('#jcTalk').checked = !!cfg.jcTalk;
   if (!jcLog.children.length) jcAdd('jc', 'Ami JC. Mic chalu kore "Hey JC" bolo, tarpor hands-free kotha bolo. "thik ache" / "bas" bolle ghumiye jabo.');
+  applyJcChat();
   if (cfg.jcTalk) handsFree(true);
 });
 $('#jcForm').addEventListener('submit', (e) => { e.preventDefault(); jcSend(jcIn.value); jcIn.value = ''; });
@@ -776,15 +822,19 @@ $('#jcChips').addEventListener('click', (e) => { const b = e.target.closest('but
 $('#jcLang').addEventListener('click', () => { cfg.jcLang = cfg.jcLang === 'en-US' ? 'bn-BD' : 'en-US'; saveCfg(); jcRenderLang(); if (jcRec) { hfRestart = true; try { jcRec.stop(); } catch {} } });
 $('#jcSpeak').addEventListener('change', (e) => { cfg.jcSpeak = e.target.checked; saveCfg(); });
 
-/* ===== hands-free voice: mic stays on; "Hey JC" wakes, "thik ache / bas / ok" sleeps ===== */
-let jcRec = null, hfOn = false, hfAwake = false, hfRestart = false, hfSpeaking = false;
-const WAKE = /\b(hey\s*)?(jc|jesi|jeshi|jisi|জেসি|জিসি|হেই\s*জেসি)\b/i;
-const SLEEP = /\b(thik ache|thik achee|bas|basta|sob ok|ok thanks|thank you|ghumao|stop|chup|ঠিক আছে|বাস|ঘুমাও|চুপ)\b/i;
+/* ===== hands-free voice: mic stays on; a name/greeting wakes, "na/pore/thik ache" sleeps ===== */
+let jcRec = null, hfOn = false, hfAwake = false, hfSpeaking = false, hfIdle = 0;
+// wake: "jc", "hey jc", "hey", "shono", "ekta kaj", or addressing it
+const WAKE = /(^|[^a-z])(hey|hi|hello|ok|okay|jc|jesi|jeshi|jisi|shono|shuno|listen|ekta kaj|kaj koro)([^a-z]|$)|একটা কাজ|কাজ করো|শোনো|শুনো|হেই|জেসি|জিসি|জে\s?সি/i;
+// sleep: user is done / defers
+const SLEEP = /^\s*(na|nah|no|thik ache|thik achee|ok thik ache|ar kichu na|ar lagbe na|pore|pore koro|pore korbo|bas|baki pore|ghumao|stop|chup|thanks|thank you|na thak|lagbe na|না|নাহ|ঠিক আছে|আর কিছু না|আর লাগবে না|পরে|বাস|ঘুমাও|থাক|লাগবে না)\s*$/i;
 
 function hfSetDot() { const b = $('#jcMic'); if (b) { b.classList.toggle('on', hfOn); b.classList.toggle('awake', hfAwake); } }
+function hfWake(greet) { hfAwake = true; hfIdle = Date.now(); hfSetDot(); if (greet) jcLocal(greet); }
+function hfSleep(msg) { hfAwake = false; hfSetDot(); if (msg) jcLocal(msg); }
 function handsFree(on) {
   cfg.jcTalk = on; saveCfg(); $('#jcTalk').checked = on;
-  if (on) { hfOn = true; hfAwake = false; startRec(); jcAdd('jc', 'Mic chalu. "Hey JC" bolo.'); }
+  if (on) { hfOn = true; hfAwake = false; startRec(); jcAdd('jc', 'Mic chalu. "JC" ba "Hey ekta kaj koro" bolo.'); }
   else { hfOn = false; hfAwake = false; if (jcRec) { try { jcRec.stop(); } catch {} } }
   hfSetDot();
 }
@@ -799,9 +849,19 @@ function startRec() {
       if (!ev.results[i].isFinal) continue;
       const t = (ev.results[i][0].transcript || '').trim();
       if (!t || hfSpeaking || jcIsEcho(t)) continue;
-      if (!hfAwake) { if (WAKE.test(t)) { hfAwake = true; hfSetDot(); jcLocal('Ha bolo Mojahid.'); } continue; }
-      if (SLEEP.test(t)) { hfAwake = false; hfSetDot(); jcLocal('Thik ache, ghumachhi. Dorkar hole "Hey JC" bolo.'); continue; }
-      const q = t.replace(WAKE, '').trim() || t;
+      if (!hfAwake) {
+        if (WAKE.test(t)) {
+          const rest = t.replace(WAKE, '').trim();
+          // if they said the wake word AND a task in one breath, do the task now
+          if (rest.length >= 3 && !SLEEP.test(rest)) { hfWake(''); jcSend(rest); }
+          else hfWake('Ha bolo Mojahid.');
+        }
+        continue;
+      }
+      // awake:
+      if (SLEEP.test(t)) { hfSleep('Okay, ami sleep-e gelam. Dorkar hole "JC" bolo.'); continue; }
+      hfIdle = Date.now();
+      const q = t.replace(/^\s*(hey\s*)?(jc|jesi|jeshi|jisi|জেসি|জিসি)\b/i, '').trim() || t;
       jcSend(q);
     }
   };
@@ -810,8 +870,18 @@ function startRec() {
   jcRec = r; hfSetDot();
   try { r.start(); } catch { jcRec = null; }
 }
+// auto-sleep after 45s of silence while awake
+setInterval(() => { if (hfOn && hfAwake && Date.now() - hfIdle > 45000) hfSleep('Onek khon chup, ami sleep-e gelam. "JC" bolle abar jagbo.'); }, 5000);
 $('#jcTalk').addEventListener('change', (e) => handsFree(e.target.checked));
 $('#jcMic').addEventListener('click', () => handsFree(!hfOn));
+$('#jcHideChat') && $('#jcHideChat').addEventListener('click', () => {
+  cfg.jcHideChat = !cfg.jcHideChat; saveCfg(); applyJcChat();
+});
+function applyJcChat() {
+  const log = $('#jcLog'), btn = $('#jcHideChat');
+  if (log) log.style.display = cfg.jcHideChat ? 'none' : '';
+  if (btn) btn.textContent = cfg.jcHideChat ? 'chat show' : 'chat hide';
+}
 
 /* ================= sheets ================= */
 function openSheet(id) { $('#sheet' + id).hidden = false; }
@@ -861,7 +931,8 @@ function loadSettingsUI() {
   $('#rScroll').value = cfg.scroll; $('#oScroll').textContent = cfg.scroll.toFixed(1);
   $('#cNatural').checked = cfg.natural; $('#cTap').checked = cfg.tap;
   $('#cLive').checked = cfg.live;
-  $('#macInput').value = cfg.mac; renderQual(); renderAdapters();
+  if ($('#cHandZoom')) $('#cHandZoom').checked = cfg.handZoom !== false;
+  renderQual();
 }
 $('#rSens').addEventListener('input', (e) => { cfg.sens = +e.target.value; $('#oSens').textContent = cfg.sens.toFixed(1); saveCfg(); });
 $('#rScroll').addEventListener('input', (e) => { cfg.scroll = +e.target.value; $('#oScroll').textContent = cfg.scroll.toFixed(1); saveCfg(); });
@@ -869,32 +940,12 @@ $('#cNatural').addEventListener('change', (e) => { cfg.natural = e.target.checke
 $('#cTap').addEventListener('change', (e) => { cfg.tap = e.target.checked; saveCfg(); });
 $('#cLive').addEventListener('change', (e) => { cfg.live = e.target.checked; saveCfg(); if (!cfg.live) clearScreen(); sendView(); updateEmpty(); });
 $$('[data-q]').forEach((b) => b.addEventListener('click', () => { cfg.qual = +b.dataset.q; saveCfg(); renderQual(); sendView(); }));
-$('#bSave').addEventListener('click', () => {
-  const raw = $('#macInput').value.trim();
-  if (raw && !normMac(raw)) return toast('MAC must be 12 hex digits (AA:BB:CC:DD:EE:FF)');
-  cfg.mac = normMac(raw); cfg.macManual = !!cfg.mac; saveCfg(); toast('Saved'); closeSheets();
-});
+$('#bSave').addEventListener('click', () => { saveCfg(); toast('Saved'); closeSheets(); });
+$('#cHandZoom') && $('#cHandZoom').addEventListener('change', (e) => { cfg.handZoom = e.target.checked; saveCfg(); if (!cfg.handZoom) { cfg.z = 1; renderView(); sendView(); } });
 $('#bSignout').addEventListener('click', () => {
   token = ''; LS.set('token', ''); try { ws.close(); } catch {} closeSheets(); showLogin('Paste your access token to pair this phone.');
 });
-function renderAdapters() {
-  const box = $('#adapters');
-  if (!box) return;
-  box.textContent = '';
-  const list = (state.info && state.info.adapters) || [];
-  if (!list.length) {
-    const d = document.createElement('div'); d.className = 'none';
-    d.textContent = state.agent ? 'No network adapters reported' : 'Turn the PC on once to auto-detect its MAC';
-    box.appendChild(d); return;
-  }
-  list.forEach((a) => {
-    const b = document.createElement('button'); b.type = 'button';
-    b.textContent = `${a.name || 'adapter'} · ${a.mac}`;
-    if (/ethernet|lan/i.test(a.name)) b.classList.add('best');
-    b.addEventListener('click', () => { $('#macInput').value = normMac(a.mac); toast('MAC filled. Tap SAVE.'); });
-    box.appendChild(b);
-  });
-}
+function renderAdapters() { /* MAC auto-detected silently via autoMac(); no UI */ }
 
 /* ================= login ================= */
 $('#loginForm').addEventListener('submit', (e) => {
@@ -926,18 +977,7 @@ applyTheme(); renderView(); buildKb(); renderStatus(); sizeCanvas(); keepAwake()
 requestAnimationFrame(loop);
 connect();
 /* JC AI connectors: the key goes straight to the PC agent (saved there in ai_keys.json), never stored on this phone */
-function aiSend(t) {
-  if (!state.agent) return toast('PC offline: PC on thakle key save hobe');
-  const id = 'ai' + Date.now();
-  jcMine.add(id);
-  const m = { t, id, p: $('#aiProv').value };
-  if (t === 'aikey') { m.key = $('#aiKey').value.trim(); m.model = $('#aiModel').value.trim(); }
-  tx(m);
-  $('#aiOut').textContent = 'PC-te pathalam, test hocche...';
-  $('#aiKey').value = '';
-}
-$('#bAiSave') && $('#bAiSave').addEventListener('click', () => aiSend('aikey'));
-$('#bAiMain') && $('#bAiMain').addEventListener('click', () => aiSend('aiset'));
+/* AI keys are configured on the PC now; phone AI-connector UI removed */
 /* helper phone app: hand it the relay address + token through a deep link (nothing leaves this phone) */
 $('#bHelperLink') && $('#bHelperLink').addEventListener('click', () => {
   if (!token) return toast('Age token diye sign in koro');
