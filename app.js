@@ -332,7 +332,7 @@ window.addEventListener('resize', sizeCanvas);
   }
   const tp = new Map();
   let start = null, t0 = 0, moved = false;
-  let pinch0 = 0, vz0 = 1, mid0 = null;
+  let pinch0 = 0, vz0 = 1, mid0 = null, lastAbs = 0;
   const handZoom = () => cfg.handZoom !== false;
   box.addEventListener('touchstart', (e) => {
     if (!cfg.live || !state.agent || !frame) return;
@@ -353,7 +353,8 @@ window.addEventListener('resize', sizeCanvas);
       const [a, b] = [...e.touches];
       const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
       const mid = { x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 };
-      const nz = Math.min(4, Math.max(1, vz0 * (d / pinch0)));
+      let nz = Math.min(4, Math.max(1, vz0 * (d / pinch0)));
+      if (nz < 1.08) nz = 1;
       // zoom around the pinch midpoint, and pan with the fingers
       const mx = (mid0.x - r.left) * u, my = (mid0.y - r.top) * u;
       vpx = mx - ((mx - vpx) / vz) * nz + (mid.x - mid0.x) * u;
@@ -371,12 +372,18 @@ window.addEventListener('resize', sizeCanvas);
       start.px = t.clientX; start.py = t.clientY;
     } else {
       // not zoomed: one finger drags the cursor
-      const p = toScreen(t.clientX, t.clientY); if (p) tx({ t: 'abs', x: p.x, y: p.y });
+      const nowT = performance.now();
+      if (nowT - lastAbs > 30) { lastAbs = nowT; const p = toScreen(t.clientX, t.clientY); if (p) tx({ t: 'abs', x: p.x, y: p.y }); }
     }
   }, { passive: false });
   function up(e) {
     for (const t of e.changedTouches) tp.delete(t.identifier);
-    if (tp.size) return;
+    if (tp.size) {
+      const t = e.touches[0];
+      if (t && start) { start.px = t.clientX; start.py = t.clientY; start.x = t.clientX; start.y = t.clientY; }
+      pinch0 = 0; mid0 = null; moved = true;
+      return;
+    }
     if (!moved && start && performance.now() - t0 < 350) {
       const p = toScreen(start.x, start.y);
       if (p) { tx({ t: 'abs', x: p.x, y: p.y }); setTimeout(() => tx({ t: 'c', b: 'l', n: 1 }), 25); buzz(8); }
@@ -385,13 +392,6 @@ window.addEventListener('resize', sizeCanvas);
   }
   box.addEventListener('touchend', up);
   box.addEventListener('touchcancel', up);
-  // double-tap to reset zoom
-  let lastTap = 0;
-  box.addEventListener('touchend', () => {
-    const now = performance.now();
-    if (now - lastTap < 300 && vz > 1.01) { vz = 1; vpx = vpy = 0; dirty = true; buzz(10); }
-    lastTap = now;
-  });
 })();
 
 
