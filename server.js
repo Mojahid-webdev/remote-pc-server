@@ -34,7 +34,7 @@ function tokenOk(t) {
 const FLAT = !fs.existsSync(path.join(__dirname, 'public'));
 const PUBLIC = FLAT ? __dirname : path.join(__dirname, 'public');
 const SERVE_EXT = new Set(['.html', '.js', '.css', '.webmanifest', '.png', '.svg', '.ico']);
-const DENY = new Set(['server.js', 'tts.js', 'edge-tts.js', 'tts_key.txt', 'package.json', 'package-lock.json', 'render.yaml']);
+const DENY = new Set(['server.js', 'tts.js', 'edge-tts.js', 'tts_key.txt', 'sarvam_key.txt', 'deepgram_key.txt', 'tts_meter.json', 'package.json', 'package-lock.json', 'render.yaml']);
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -73,6 +73,10 @@ const server = http.createServer((req, res) => {
       })
       .catch((e) => { res.writeHead(502, { 'cache-control': 'no-store' }); res.end('tts fail: ' + (e.message || 'err')); });
     return;
+  }
+  if (p === '/tts-status') {
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    return res.end(JSON.stringify(tts ? tts.status() : { error: 'tts not loaded' }));
   }
   if (p === '/health') {
     res.writeHead(200, { 'content-type': 'text/plain', 'cache-control': 'no-store' });
