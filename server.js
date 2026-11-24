@@ -13,6 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
+let tts = null; try { tts = require('./tts'); } catch (e) { console.error('tts load failed', e.message); }
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const TOKEN = process.env.TOKEN || '';
@@ -33,7 +34,7 @@ function tokenOk(t) {
 const FLAT = !fs.existsSync(path.join(__dirname, 'public'));
 const PUBLIC = FLAT ? __dirname : path.join(__dirname, 'public');
 const SERVE_EXT = new Set(['.html', '.js', '.css', '.webmanifest', '.png', '.svg', '.ico']);
-const DENY = new Set(['server.js', 'package.json', 'package-lock.json', 'render.yaml']);
+const DENY = new Set(['server.js', 'tts.js', 'edge-tts.js', 'tts_key.txt', 'package.json', 'package-lock.json', 'render.yaml']);
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -49,7 +50,7 @@ const SEC_HEADERS = {
   'Referrer-Policy': 'no-referrer',
   'X-Frame-Options': 'DENY',
   'Content-Security-Policy':
-    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' ws: wss:; manifest-src 'self'; frame-ancestors 'none'",
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; media-src 'self' blob: data:; connect-src 'self' ws: wss:; manifest-src 'self'; frame-ancestors 'none'",
 };
 
 const server = http.createServer((req, res) => {
@@ -59,6 +60,19 @@ const server = http.createServer((req, res) => {
   } catch {
     res.writeHead(400);
     return res.end('bad request');
+  }
+  if (p === '/tts') {
+    const u = new URL(req.url, 'http://x');
+    const text = (u.searchParams.get('text') || '').slice(0, 500);
+    const voice = (u.searchParams.get('voice') || (tts && tts.DEFAULT_VOICE) || '').slice(0, 60);
+    if (!tts || !text) { res.writeHead(400, { 'cache-control': 'no-store' }); return res.end('bad'); }
+    tts.getAudio(text, voice || tts.DEFAULT_VOICE)
+      .then((buf) => {
+        res.writeHead(200, { 'content-type': 'audio/mpeg', 'cache-control': 'public, max-age=86400', ...SEC_HEADERS });
+        res.end(buf);
+      })
+      .catch((e) => { res.writeHead(502, { 'cache-control': 'no-store' }); res.end('tts fail: ' + (e.message || 'err')); });
+    return;
   }
   if (p === '/health') {
     res.writeHead(200, { 'content-type': 'text/plain', 'cache-control': 'no-store' });

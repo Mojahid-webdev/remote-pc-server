@@ -9,7 +9,7 @@ const LS = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
 const cfg = Object.assign(
-  { sens: 2.4, scroll: 1.0, natural: true, tap: true, mode: 'rel', mac: '', loupe: false, lz: 3, lr: 68, live: true, qual: 1, handZoom: true, theme: 'dark', accent: '#c8ff3e' },
+  { sens: 2.4, scroll: 1.0, natural: true, tap: true, mode: 'rel', mac: '', loupe: false, lz: 3, lr: 68, live: true, qual: 1, handZoom: true, jcServerVoice: true, theme: 'dark', accent: '#c8ff3e' },
   LS.get('cfg', {})
 );
 const saveCfg = () => LS.set('cfg', cfg);
@@ -770,24 +770,36 @@ function jcReply(m) {
   jcAdd('jc', say);
   if (typeof hfAwake !== 'undefined' && hfOn && hfAwake) hfIdle = Date.now();
   const talk = !!cfg.jcTalk; if (typeof hfSpeaking !== 'undefined') hfSpeaking = true;
-  if ((cfg.jcSpeak || talk) && 'speechSynthesis' in window) {
-    try {
-      speechSynthesis.cancel();
-      let sp = say.includes('\n') ? say.split('\n')[0] : say;
-      if (sp.length > 400) sp = sp.slice(0, 400);
-      const u = new SpeechSynthesisUtterance(sp);
-      const isBn = /[\u0980-\u09FF]/.test(sp);
-      u.lang = isBn ? 'bn-BD' : (cfg.jcLang === 'en-US' ? 'en-US' : 'en-IN');
-      const v = jcPickVoice(isBn);
-      if (v) { u.voice = v; u.lang = v.lang; }
-      jcLastSpoken = say;
-      u.onend = () => { jcSpeakEnd = Date.now(); setTimeout(() => { hfSpeaking = false; }, 300); };
-      u.onerror = () => { jcSpeakEnd = Date.now(); setTimeout(() => { hfSpeaking = false; }, 300); };
-      speechSynthesis.speak(u);
-      return;
-    } catch {}
-  }
-  if (!(cfg.jcSpeak || talk)) hfSpeaking = false;
+  if (cfg.jcSpeak || talk) { jcLastSpoken = say; jcSpeak(say.includes('\n') ? say.split('\n')[0] : say); return; }
+  hfSpeaking = false;
+}
+let jcAudio = null;
+function jcSpeakDone() { jcSpeakEnd = Date.now(); setTimeout(() => { hfSpeaking = false; }, 300); }
+/* server voice first (young male Bangla from the relay), phone voice as fallback */
+function jcSpeak(text) {
+  text = (text || '').slice(0, 480);
+  if (cfg.jcServerVoice === false) return jcSpeakPhone(text);
+  try { if (jcAudio) { jcAudio.pause(); jcAudio = null; } } catch {}
+  try { speechSynthesis.cancel(); } catch {}
+  const a = new Audio('/tts?text=' + encodeURIComponent(text));
+  jcAudio = a;
+  a.onended = jcSpeakDone;
+  a.onerror = () => { jcAudio = null; jcSpeakPhone(text); };
+  a.play().catch(() => { jcAudio = null; jcSpeakPhone(text); });
+}
+function jcSpeakPhone(sp) {
+  if (!('speechSynthesis' in window)) { hfSpeaking = false; return; }
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(sp);
+    const isBn = /[\u0980-\u09FF]/.test(sp);
+    u.lang = isBn ? 'bn-BD' : (cfg.jcLang === 'en-US' ? 'en-US' : 'en-IN');
+    const v = jcPickVoice(isBn);
+    if (v) { u.voice = v; u.lang = v.lang; }
+    u.onend = jcSpeakDone;
+    u.onerror = jcSpeakDone;
+    speechSynthesis.speak(u);
+  } catch { hfSpeaking = false; }
 }
 function jcVoices() { try { return speechSynthesis.getVoices() || []; } catch { return []; } }
 function jcPickVoice(bn) {
@@ -812,7 +824,7 @@ try { speechSynthesis.addEventListener('voiceschanged', jcFillVoices); } catch {
 function jcTalkNext() { /* legacy no-op: hands-free engine handles continuous listening */ }
 function jcRenderLang() { $('#jcLang').textContent = cfg.jcLang === 'en-US' ? 'EN' : 'BN'; }
 $('#btnJC').addEventListener('click', () => {
-  openSheet('JC'); jcRenderLang(); jcFillVoices(); $('#jcSpeak').checked = !!cfg.jcSpeak; $('#jcTalk').checked = !!cfg.jcTalk;
+  openSheet('JC'); jcRenderLang(); jcFillVoices(); $('#jcSpeak').checked = !!cfg.jcSpeak; $('#jcTalk').checked = !!cfg.jcTalk; if ($('#jcServerVoice')) $('#jcServerVoice').checked = cfg.jcServerVoice !== false;
   if (!jcLog.children.length) jcAdd('jc', 'Ami JC. Mic chalu kore "Hey JC" bolo, tarpor hands-free kotha bolo. "thik ache" / "bas" bolle ghumiye jabo.');
   applyJcChat();
   if (cfg.jcTalk) handsFree(true);
@@ -821,6 +833,7 @@ $('#jcForm').addEventListener('submit', (e) => { e.preventDefault(); jcSend(jcIn
 $('#jcChips').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) jcSend(b.dataset.q); });
 $('#jcLang').addEventListener('click', () => { cfg.jcLang = cfg.jcLang === 'en-US' ? 'bn-BD' : 'en-US'; saveCfg(); jcRenderLang(); if (jcRec) { hfRestart = true; try { jcRec.stop(); } catch {} } });
 $('#jcSpeak').addEventListener('change', (e) => { cfg.jcSpeak = e.target.checked; saveCfg(); });
+$('#jcServerVoice') && $('#jcServerVoice').addEventListener('change', (e) => { cfg.jcServerVoice = e.target.checked; saveCfg(); });
 
 /* ===== hands-free voice: mic stays on; a name/greeting wakes, "na/pore/thik ache" sleeps ===== */
 let jcRec = null, hfOn = false, hfAwake = false, hfSpeaking = false, hfIdle = 0;
